@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
+import { Avatar } from "@/components/ui/Avatar";
 
 const NAV_ITEMS = [
   {
@@ -57,9 +58,11 @@ const NAV_ITEMS = [
 export function Sidebar({
   userName,
   userInitials,
+  userImage,
 }: {
   userName: string;
   userInitials: string;
+  userImage?: string | null;
 }) {
   const pathname = usePathname();
 
@@ -115,12 +118,17 @@ export function Sidebar({
 
       {/* User info */}
       <div className="flex items-center gap-2.5 border-t border-neutral-200 px-2 pt-3 dark:border-neutral-800">
-        <div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
-          {userInitials}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-semibold">{userName}</div>
-        </div>
+        <Link
+          href="/profile"
+          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-lg py-1 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 ${
+            pathname.startsWith("/profile") ? "text-indigo-600 dark:text-indigo-400" : ""
+          }`}
+        >
+          <Avatar src={userImage} initials={userInitials} size={30} className="text-xs" />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-semibold">{userName}</div>
+          </div>
+        </Link>
         <LogoutButton />
       </div>
     </aside>

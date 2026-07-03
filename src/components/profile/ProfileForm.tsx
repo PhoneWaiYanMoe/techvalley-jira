@@ -5,6 +5,19 @@ import { useRouter } from "next/navigation";
 import { updateProfileSchema } from "@/validation/profile.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { Avatar } from "@/components/ui/Avatar";
+
+function getInitials(name: string): string {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2) || "?"
+  );
+}
 
 export function ProfileForm({
   initialName,
@@ -63,6 +76,7 @@ export function ProfileForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <Avatar src={profileImage} initials={getInitials(name)} size={56} className="text-lg" />
       <Input id="email" label="Email" value={email} disabled />
       <Input
         id="name"

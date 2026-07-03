@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/profile/profile.service";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { PasswordChangeForm } from "@/components/profile/PasswordChangeForm";
+import { DeleteAccountSection } from "@/components/profile/DeleteAccountSection";
 
 export const metadata: Metadata = {
   title: "Profile — TechValley Jira Lite",
@@ -39,6 +40,9 @@ export default async function ProfilePage() {
         <div className="mt-4 max-w-md">
           <PasswordChangeForm disabled={!hasEmailIdentity} />
         </div>
+      </section>
+      <section className="max-w-md border-t border-neutral-200 pt-8 dark:border-neutral-800">
+        <DeleteAccountSection requiresPassword={hasEmailIdentity} />
       </section>
     </div>
   );
