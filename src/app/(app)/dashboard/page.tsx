@@ -1,19 +1,6 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Dashboard — TechValley Jira Lite",
-};
-
-// Placeholder landing page for the authenticated shell. Full personal
-// dashboard (FR-081: assigned issues, due soon/today, recent comments,
-// teams/projects) is Day 6 scope per timeline.md.
+// Redirect /dashboard → /projects (the new home for the workspace)
 export default function DashboardPage() {
-  return (
-    <div>
-      <h1 className="text-xl font-semibold">Dashboard</h1>
-      <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
-        Personal dashboard coming soon.
-      </p>
-    </div>
-  );
+  redirect("/projects");
 }
