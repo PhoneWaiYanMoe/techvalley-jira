@@ -8,3 +8,56 @@ export type ProfileResponse = {
   profileImage: string | null;
   email: string | null;
 };
+
+// --- Projects (FR-020..027) ---
+
+export type ProjectResponse = {
+  id: string;
+  teamId: string;
+  ownerId: string;
+  name: string;
+  description: string | null;
+  isArchived: boolean;
+  createdAt: string;
+  issueCounts: Record<string, number>;
+  isFavorited: boolean;
+  ownerName: string;
+  ownerInitials: string;
+};
+
+export type ProjectListResponse = {
+  data: ProjectResponse[];
+  nextCursor: string | null;
+};
+
+export type DashboardIssue = {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  assigneeName: string | null;
+  assigneeInitials: string | null;
+  dueDate: string | null;
+  createdAt: string;
+};
+
+export type ProjectDashboardResponse = {
+  project: ProjectResponse;
+  kpis: {
+    totalIssues: number;
+    completionRate: number;
+    inFlight: number;
+    highPriorityOpen: number;
+  };
+  statusBreakdown: { name: string; count: number; color: string }[];
+  priorityBreakdown: { name: string; count: number; color: string }[];
+  workloadByAssignee: {
+    userId: string;
+    name: string;
+    initials: string;
+    color: string;
+    openCount: number;
+  }[];
+  recentIssues: DashboardIssue[];
+  dueSoonIssues: DashboardIssue[];
+};

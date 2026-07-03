@@ -41,6 +41,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+desktop.ini
+
 # internal planning docs — not shared via git, dev-to-dev only (shared via Google Drive)
 /task-division.md
 /timeline.md
