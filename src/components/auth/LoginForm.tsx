@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema } from "@/validation/auth.schema";
@@ -10,6 +10,13 @@ import { Button } from "@/components/ui/Button";
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const passwordUpdated =
+    searchParams.get("reset") === "success" || searchParams.get("passwordChanged") === "true";
+  const oauthError =
+    searchParams.get("error") === "oauth_failed"
+      ? (searchParams.get("errorMessage") ?? "Google sign-in failed")
+      : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -48,6 +55,12 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      {passwordUpdated && (
+        <p className="text-sm text-green-600">
+          Password updated. Log in with your new password.
+        </p>
+      )}
+      {oauthError && <p className="text-sm text-red-600">{oauthError}</p>}
       <Input
         id="email"
         label="Email"
