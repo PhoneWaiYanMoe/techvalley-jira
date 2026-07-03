@@ -221,6 +221,32 @@ no automatic sync between the two.
   `errorMessage` query param, and `LoginForm.tsx` displays it — previously
   `?error=oauth_failed` showed nothing to the user at all.
 
+### Email provider switched to SendGrid (2026-07-03)
+
+Resend's `onboarding@resend.dev` restriction (only delivers to the account owner's own
+email, see above) made it unusable for testing signups with arbitrary emails, and
+that's a real blocker since FR-003/FR-013 need to reach other testers/graders.
+Switched Supabase's custom SMTP to **SendGrid** with **Single Sender Verification**
+(verifies one specific "from" address via an emailed confirmation link — no DNS access
+needed, unlike full domain authentication) — this lifts the *recipient* restriction
+that Resend had, so signups now deliver to any email address. Sender is
+`eric.ai@techvalleyvn.net`, verified as a Single Sender in SendGrid (not a fully
+authenticated domain — that still needs DNS access to `techvalleyvn.net`, same
+constraint as before). SMTP config: host `smtp.sendgrid.net`, port 587, username is
+literally the string `apikey` (not a placeholder), password is the SendGrid API key.
+Note Eric's first SendGrid account had exhausted its free trial — this is a second,
+fresh account.
+
+### UI polish fixes (2026-07-03)
+
+- `(app)/profile/page.tsx` had no padding — Dev B's `Sidebar` layout swap left
+  `<main>` in `(app)/layout.tsx` with zero padding by design (each page is expected
+  to apply its own, e.g. `/projects` uses `p-6 pb-10` per `DESIGN.md`'s documented
+  "Content padding" convention). Profile page just never got that treatment. Fixed by
+  adding `p-6 pb-10` to the page's root div, matching `/projects` exactly — don't add
+  padding to the shared `<main>` instead, that would double it up on pages that
+  already handle their own.
+
 ## Day 2 — Dev B's Project Workspace (pulled 2026-07-03)
 
 Dev B (git author "MileFisher") landed the full Project feature set (FR-020..027,

@@ -24,7 +24,7 @@ export default async function ProfilePage() {
   const hasEmailIdentity = user.identities?.some((i) => i.provider === "email") ?? false;
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-col gap-10 p-6 pb-10">
       <section>
         <h1 className="text-xl font-semibold">Profile</h1>
         <div className="mt-4 max-w-md">
