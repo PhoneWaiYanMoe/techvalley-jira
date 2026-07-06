@@ -43,7 +43,7 @@ client directly from the frontend — no custom API route needed for those
 | GET | `/api/teams/:teamId` | — | team detail | — |
 | PATCH | `/api/teams/:teamId` | `{ name }` | updated team | FR-011 (OWNER/ADMIN) |
 | DELETE | `/api/teams/:teamId` | — | `204` | FR-012 (OWNER only) |
-| GET | `/api/teams/:teamId/members` | — | `[{ userId, name, email, role, joinedAt }]` | FR-014 |
+| GET | `/api/teams/:teamId/members` | — | `{ data: [{ userId, name, email, role, joinedAt }] }` | FR-014 |
 | DELETE | `/api/teams/:teamId/members/:userId` | — | `204` | FR-015 (kick; role-scoped) |
 | POST | `/api/teams/:teamId/leave` | — | `204` | FR-016 (not OWNER) |
 | PATCH | `/api/teams/:teamId/members/:userId/role` | `{ role }` | updated member | FR-018 (OWNER only; transfer-owner sets old owner to ADMIN) |
@@ -103,7 +103,7 @@ client directly from the frontend — no custom API route needed for those
 | Method | Path | Body | Response | FR |
 |---|---|---|---|---|
 | POST | `/api/projects/:projectId/issues` | `{ title, description?, assigneeUserId?, dueDate?, priority?, labelIds? }` | issue | FR-030 (`422` if 200/project hit) |
-| GET | `/api/projects/:projectId/issues?status=&assignee=&priority=&label=&hasDueDate=&dueFrom=&dueTo=&search=&sort=&cursor=` | — | paginated issue list | FR-036 |
+| GET | `/api/projects/:projectId/issues?status=&assignee=&priority=&label=&hasDueDate=&dueFrom=&dueTo=&search=&sort=&cursor=` | — | paginated issue list, incl. `total` (for the x/200 counter; filters/sort land with FR-036) | FR-036 |
 | GET | `/api/issues/:issueId` | — | full detail incl. subtasks, labels, comment count | FR-031 |
 | PATCH | `/api/issues/:issueId` | any editable field | updated issue (writes `issue_history` per changed field) | FR-032/039 |
 | DELETE | `/api/issues/:issueId` | — | `204` | FR-035 |
