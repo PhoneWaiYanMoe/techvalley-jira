@@ -31,10 +31,9 @@ const NAV_ITEMS = [
     ),
   },
   {
-    key: "members",
-    label: "Members",
-    href: "#",
-    badge: "",
+    key: "teams",
+    label: "Teams",
+    href: "/teams",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -71,7 +70,9 @@ export function Sidebar({
     ? "projects"
     : pathname.startsWith("/dashboard")
       ? "dashboard"
-      : "";
+      : pathname.startsWith("/teams")
+        ? "teams"
+        : "";
 
   return (
     <aside className="flex w-[250px] shrink-0 flex-col border-r border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -104,11 +105,6 @@ export function Sidebar({
             >
               <span className="flex">{item.icon}</span>
               <span className="flex-1">{item.label}</span>
-              {item.badge && (
-                <span className="font-mono text-[10.5px] font-semibold text-neutral-400">
-                  {item.badge}
-                </span>
-              )}
             </Link>
           );
         })}
