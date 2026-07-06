@@ -52,8 +52,9 @@ export function ProjectsPageClient() {
   }, [teamId]);
 
   useEffect(() => {
-    fetchProjects();
-    fetchTeamId();
+    void (async () => {
+      await Promise.all([fetchProjects(), fetchTeamId()]);
+    })();
   }, [fetchProjects, fetchTeamId]);
 
   // Filter by tab
