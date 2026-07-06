@@ -9,6 +9,27 @@ export type ProfileResponse = {
   email: string | null;
 };
 
+// --- Teams (FR-010..019) ---
+
+export type TeamRole = "OWNER" | "ADMIN" | "MEMBER";
+
+export type TeamResponse = {
+  id: string;
+  name: string;
+  ownerId: string;
+  createdAt: string;
+  myRole: TeamRole;
+  memberCount: number;
+};
+
+export type TeamMemberResponse = {
+  userId: string;
+  name: string;
+  email: string | null;
+  role: TeamRole;
+  joinedAt: string;
+};
+
 // --- Projects (FR-020..027) ---
 
 export type ProjectResponse = {
@@ -39,6 +60,47 @@ export type DashboardIssue = {
   assigneeInitials: string | null;
   dueDate: string | null;
   createdAt: string;
+};
+
+// --- Issues (FR-030..036) ---
+
+export type IssueStatusOption = {
+  id: string;
+  name: string;
+  color: string | null;
+  position: number;
+  isDefault: boolean;
+  wipLimit: number | null;
+};
+
+export type IssueResponse = {
+  id: string;
+  projectId: string;
+  title: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  dueDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  status: { id: string; name: string; color: string };
+  assignee: { id: string; name: string; initials: string } | null;
+};
+
+export type IssueListResponse = {
+  data: IssueResponse[];
+  nextCursor: string | null;
+  total: number;
+};
+
+export type IssueDetailResponse = IssueResponse & {
+  description: string | null;
+  creator: { id: string; name: string };
+  teamId: string;
+  projectName: string;
+  projectArchived: boolean;
+  canDelete: boolean;
+  subtasks: { id: string; title: string; isCompleted: boolean; position: number }[];
+  labels: { id: string; name: string; color: string }[];
+  commentCount: number;
 };
 
 export type ProjectDashboardResponse = {

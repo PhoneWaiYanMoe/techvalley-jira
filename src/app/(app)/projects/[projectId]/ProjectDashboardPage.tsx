@@ -2,13 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { ProjectDashboard } from "@/components/projects/ProjectDashboard";
+import { ProjectTabs } from "@/components/projects/ProjectTabs";
 
 export function ProjectDashboardPage({ projectId }: { projectId: string }) {
   const router = useRouter();
 
   return (
     <div className="p-6 pb-10">
-      {/* Back button + breadcrumb */}
+      {/* Back button + tabs */}
       <div className="mb-5 flex items-center gap-3">
         <button
           onClick={() => router.push("/projects")}
@@ -19,6 +20,7 @@ export function ProjectDashboardPage({ projectId }: { projectId: string }) {
           </svg>
           Projects
         </button>
+        <ProjectTabs projectId={projectId} />
       </div>
 
       <ProjectDashboard projectId={projectId} />

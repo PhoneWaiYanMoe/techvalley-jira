@@ -63,8 +63,11 @@ no automatic sync between the two.
   (`createServerClient`, async `cookies()` per Next.js 16), respects the current
   user's session/RLS.
 - `src/lib/supabase/admin.ts` — service-role client, bypasses RLS. Only call after an
-  explicit permission check (`lib/permissions/guard.ts`, not yet built) per FR-070.
-  Never expose `SUPABASE_SERVICE_ROLE_KEY` to the client.
+  explicit permission check per FR-070. Never expose `SUPABASE_SERVICE_ROLE_KEY` to
+  the client. `lib/permissions/guard.ts` (the general shared guard per
+  `folder-structure.md`) still isn't built — Dev B's `lib/team/team.service.ts`
+  (`requireTeamMembership`) is filling that role for projects as a stopgap, see
+  Day 2 section below.
 - `.env.example` documents the required vars (`NEXT_PUBLIC_SUPABASE_URL`,
   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
   `NEXT_PUBLIC_SITE_URL`, plus placeholders for AI provider and email provider keys
@@ -97,7 +100,9 @@ no automatic sync between the two.
 - `src/app/(app)/layout.tsx` re-checks auth server-side too (defense in depth — Next's
   own docs warn a matcher change could silently remove proxy coverage), then renders
   `components/layout/Navbar.tsx` (extracted per `folder-structure.md`'s
-  `components/layout/` convention, not inlined in the layout file).
+  `components/layout/` convention, not inlined in the layout file). **Superseded
+  2026-07-03**: Dev B replaced this globally with `components/layout/Sidebar.tsx` —
+  `Navbar.tsx` was deleted (see Day 2 section).
 - `src/app/(app)/profile/page.tsx` + `components/profile/{ProfileForm,PasswordChangeForm}.tsx`
   + `src/app/api/profile/route.ts` (GET/PATCH) + `src/app/api/profile/password/route.ts`
   (PATCH) — FR-005/FR-006. Routes are thin (parse/validate → call
@@ -131,6 +136,223 @@ no automatic sync between the two.
   neither `chromium-cli` nor a project run-skill existed) — full flow (signup →
   email-confirm notice → login → profile prefill/edit/persist → wrong/right password
   change → logout → protected-route redirect) verified working.
+
+## Day 2 — OAuth, reset, account deletion (done)
+
+- `src/components/auth/GoogleSignInButton.tsx` (used on both login/signup pages) +
+  `src/app/auth/callback/route.ts` — FR-004. `signInWithOAuth({ provider: 'google' })`
+  redirects to Google, which redirects to Supabase's own callback (configured in
+  Google Cloud Console per Day 0), which redirects to our `/auth/callback?code=...`
+  Route Handler, which calls `exchangeCodeForSession(code)` (PKCE flow) and redirects
+  to `/dashboard`. Not automatable in this environment (needs a real Google login) —
+  verify manually: click "Continue with Google" on `/login`, complete the consent
+  screen, confirm you land on `/dashboard` with a session.
+- `src/components/auth/{ForgotPasswordForm,ResetPasswordForm}.tsx` +
+  `(auth)/{forgot-password,reset-password}/page.tsx` — FR-003. Request step calls
+  `resetPasswordForEmail()` directly (client-side, no custom API route, matches
+  `api.md`'s FR-001..004 note). Always shows the same success message regardless of
+  whether the email exists (anti-enumeration, same reasoning as the FR-001 duplicate
+  fix).
+  - **Real bug found + fixed**: Supabase's recovery email link uses the older
+    **implicit/hash-token flow** (`#access_token=...&refresh_token=...&type=recovery`),
+    not the PKCE `?code=` flow that `/auth/callback` uses for Google. `@supabase/ssr`'s
+    browser client is built around PKCE and does **not** reliably auto-detect hash
+    tokens via `onAuthStateChange`'s `PASSWORD_RECOVERY` event — waiting on that event
+    left the reset form stuck forever. Fixed by parsing `window.location.hash` directly
+    in `ResetPasswordForm` and calling `supabase.auth.setSession({ access_token,
+    refresh_token })` explicitly, then stripping the tokens from the URL bar via
+    `history.replaceState`. If any other recovery-link-style flow gets added later
+    (e.g. magic links), expect the same issue and apply the same fix.
+  - **Guard fix**: `/reset-password` must be reachable regardless of auth state — a
+    user following the email link gets a temporary Supabase session, which would
+    otherwise make `proxy.ts`'s "redirect authenticated users away from public auth
+    pages" rule bounce them to `/dashboard` before they can set a new password. Split
+    `lib/supabase/middleware.ts`'s path list into `AUTH_ONLY_PATHS` (login/signup/
+    forgot-password — redirect away if logged in) and `ALWAYS_ACCESSIBLE_PATHS`
+    (reset-password, auth/callback — never redirected either direction).
+- `src/components/profile/DeleteAccountSection.tsx` + `deleteAccount()` in
+  `profile.service.ts` + `DELETE /api/profile` — FR-007. Password re-confirmation only
+  for accounts with an email identity (Google-only users just click confirm, per PRD).
+  409 if the user owns any non-deleted team (`"Please delete owned teams or transfer
+  ownership first"`, PRD's exact wording). On success: soft-deletes `profiles`
+  (`deleted_at`), then **bans the auth user** via
+  `admin.auth.admin.updateUserById(id, { ban_duration: '876000h' })` (~100 years)
+  rather than hard-deleting `auth.users` — a hard delete would cascade-delete
+  `profiles` via its FK (`on delete cascade`), destroying the very soft-delete row
+  we're trying to keep, and letting a "deleted" user still authenticate.
+- `src/components/ui/Button.tsx` gained a `danger` variant (red, for the delete-account
+  button) — the component just string-concatenates variant classes with any passed
+  `className`, so overriding `bg-neutral-900` via `className` wasn't reliable; a proper
+  variant is the correct fix for any future destructive-action buttons too.
+- E2E-tested via scratch Playwright scripts (same pattern as Day 1): password reset
+  (request → Supabase admin `generateLink` to simulate clicking the email → set new
+  password → redirect to login → re-login with new password → lands in the app) and
+  account deletion (both the 409 owned-team block and the full successful-deletion
+  path, verified server-side via `profiles.deleted_at` and `auth.users.banned_until`).
+  Google OAuth itself was not automated (see above) — confirm manually before Day 8
+  submission.
+
+### Day 2 follow-up fixes (found via Eric's manual testing, 2026-07-03)
+
+- **Bug fixed**: `PasswordChangeForm.tsx` used to just show an inline "Password
+  changed" notice and leave the user on the page. But changing a password via
+  `admin.auth.admin.updateUserById` invalidates the current session server-side —
+  so the user looked logged in but would get silently bounced to `/login` on their
+  *next* navigation, with no explanation. Fixed to match the reset-password pattern:
+  sign out and redirect to `/login?passwordChanged=true` immediately, with a clear
+  notice on the login page (shared with the `?reset=success` notice).
+- **Bug fixed**: the profile image URL (FR-005) saved correctly to the DB, but
+  nothing in the UI ever rendered it as an actual image — `Sidebar.tsx`'s avatar and
+  `ProfileForm.tsx` both only ever showed initials. Added `components/ui/Avatar.tsx`
+  (plain `<img>`, not `next/image`, since profile image URLs are arbitrary
+  user-supplied domains with no fixed allowlist; falls back to initials on missing
+  URL or load error) and wired it into both places. `(app)/layout.tsx` now passes
+  `profile.profileImage` through to `Sidebar`.
+- **Not a bug, confirmed working as designed**: deleting an account (FR-007) and
+  then trying to sign up again with the same email correctly shows "may already be
+  registered" — because deletion bans the `auth.users` row rather than hard-deleting
+  it (see above), so the email is permanently reserved by the soft-deleted account.
+  Eric confirmed this is the desired behavior (matches how most real products treat
+  account deletion) — don't "fix" this without checking with him first, since making
+  emails reusable after deletion would require actively mangling the banned user's
+  email server-side, a nontrivial change.
+- **Small polish**: `/auth/callback` now forwards Supabase's `error_description`
+  (e.g. "User is banned" when someone tries Google OAuth on a deleted account) as an
+  `errorMessage` query param, and `LoginForm.tsx` displays it — previously
+  `?error=oauth_failed` showed nothing to the user at all.
+
+### Email provider switched to SendGrid (2026-07-03)
+
+Resend's `onboarding@resend.dev` restriction (only delivers to the account owner's own
+email, see above) made it unusable for testing signups with arbitrary emails, and
+that's a real blocker since FR-003/FR-013 need to reach other testers/graders.
+Switched Supabase's custom SMTP to **SendGrid** with **Single Sender Verification**
+(verifies one specific "from" address via an emailed confirmation link — no DNS access
+needed, unlike full domain authentication) — this lifts the *recipient* restriction
+that Resend had, so signups now deliver to any email address. Sender is
+`eric.ai@techvalleyvn.net`, verified as a Single Sender in SendGrid (not a fully
+authenticated domain — that still needs DNS access to `techvalleyvn.net`, same
+constraint as before). SMTP config: host `smtp.sendgrid.net`, port 587, username is
+literally the string `apikey` (not a placeholder), password is the SendGrid API key.
+Note Eric's first SendGrid account had exhausted its free trial — this is a second,
+fresh account.
+
+### UI polish fixes (2026-07-03)
+
+- `(app)/profile/page.tsx` had no padding — Dev B's `Sidebar` layout swap left
+  `<main>` in `(app)/layout.tsx` with zero padding by design (each page is expected
+  to apply its own, e.g. `/projects` uses `p-6 pb-10` per `DESIGN.md`'s documented
+  "Content padding" convention). Profile page just never got that treatment. Fixed by
+  adding `p-6 pb-10` to the page's root div, matching `/projects` exactly — don't add
+  padding to the shared `<main>` instead, that would double it up on pages that
+  already handle their own.
+
+## Day 2 — Dev B's Project Workspace (pulled 2026-07-03)
+
+Dev B (git author "MileFisher") landed the full Project feature set (FR-020..027,
+FR-080) directly onto `dev/Eric` as commit `9e4063f` (single parent, not a merge —
+worth knowing if branch history looks unusual later). Well-documented in
+`docs/session-log-2026-07-03.md` and `DESIGN.md` (typography/color/spacing design
+system — read this before building any new UI, both devs should follow it for visual
+consistency).
+
+- `src/lib/team/team.service.ts` — **stopgap** team helper (`getUserTeams`,
+  `getUserFirstTeam`, `requireTeamMembership`) until Dev A builds real team management
+  (FR-010..019, Day 3). `requireTeamMembership` currently does the FR-070 404 job that
+  `lib/permissions/guard.ts` was meant to do. When building real teams, either promote
+  this into `lib/permissions/guard.ts` per the original plan, or explicitly keep
+  `team.service.ts` as the guard's home and update `folder-structure.md`'s mental
+  model — coordinate with Dev B either way since `project.service.ts` imports from it.
+- `src/lib/project/project.service.ts` + 8 API routes + `components/projects/*` +
+  `/projects`, `/projects/[projectId]` pages — full CRUD, favorites, archive, and
+  FR-080 dashboard (KPI cards, status donut, priority bars, workload chart). Follows
+  the same thin-route + service-layer + `types/api.ts` DTO pattern established in
+  Day 1.
+- `/dashboard` now redirects to `/projects` (old placeholder retired).
+- **Integration fix applied 2026-07-03**: Dev B's new `Sidebar.tsx` (replacing
+  `Navbar.tsx`) dropped the link to `/profile` entirely — the user-info block was
+  static text with no way to navigate there. Fixed by wrapping it in a `Link` to
+  `/profile` (kept `LogoutButton` as a separate sibling so its click doesn't get
+  swallowed by the link).
+- **Known lint issue (not fixed, flagged for Dev B)**: `ProjectsPageClient.tsx` and
+  `ProjectDashboard.tsx` both trigger `react-hooks/set-state-in-effect` errors (calling
+  a `setState`-triggering fetch function directly in a `useEffect` body — the classic
+  "fetch on mount" pattern, which this stricter lint rule flags even though it's
+  functionally fine and very common). `npm run build` doesn't run ESLint in this repo
+  so builds aren't blocked, but `npx eslint .` / `npm run lint` will surface these two
+  errors. Left for Dev B to fix since it's their component logic — either wrap the
+  effect body in an async IIFE, or add a targeted eslint-disable if the team decides
+  the rule is too strict for fetch-on-mount.
+- Dev B's own noted limitations (see session log for full list): no real project data
+  seeded yet for manual testing, AI summary is a hardcoded placeholder (real FR-040..045
+  integration pending AI provider choice), no issue CRUD yet, DB only seeds 3 default
+  statuses but the design uses 4 ("In Review" — can be added as a custom status per
+  FR-053), Members/Activity sidebar links are stubs pending Dev A's FR-014/FR-019.
+
+## Incident: Next.js accidentally downgraded to v9 (2026-07-05)
+
+Dev B's commit `555b9f3` ("update package.json") on branch `dev/akp`, merged into
+`dev/Eric` via `0fc771f`, changed `"next": "^16.2.10"` to `"next": "^9.3.3"` in
+`package.json` (and regenerated `package-lock.json` to match) — almost certainly an
+accidental edit, not intentional. Next.js 9 predates the App Router entirely
+(introduced in v13), so this would have broken the *entire* app — `proxy.ts`, route
+groups, Route Handlers, everything — the moment anyone ran `npm install`/`npm ci`
+fresh (a new clone, CI, or a Vercel deploy). Local `node_modules` still had 16.2.10
+installed at the time so nothing broke immediately, but this was a live landmine.
+**Fixed immediately** by restoring `"next": "^16.2.10"` and regenerating the lockfile.
+If a similar unexplained dependency version change shows up in a future pull, check
+`package.json`'s diff line-by-line before trusting it — don't assume `npm install`
+succeeding locally means the committed lockfile is safe.
+
+## Day 3 — Teams (done)
+
+FR-010 (create), FR-011 (update, OWNER/ADMIN), FR-012 (delete + cascade soft delete,
+OWNER only), FR-014 (member list), FR-015 (kick, role-scoped), FR-016 (leave,
+not OWNER).
+
+- `src/lib/team/team.service.ts` — Dev B's stopgap (`getUserTeams`, `getUserFirstTeam`,
+  `requireTeamMembership`) is now the **permanent home** for all team logic; extended
+  in place with `createTeam`, `getTeam`, `updateTeam`, `deleteTeam`, `listMembers`,
+  `kickMember`, `leaveTeam` rather than creating a competing `lib/teams/` (plural)
+  file per `folder-structure.md`'s original plan — avoids breaking Dev B's existing
+  `project.service.ts` import and matches the doc's own "one service file per
+  resource" rule better than splitting it would have.
+- `src/lib/permissions/team-role.ts` — small `isOwner`/`isOwnerOrAdmin` helpers used
+  throughout the service for permission checks (FR-011/012/015/016).
+- `deleteTeam()` cascades soft-delete three levels deep: team → its projects → those
+  projects' issues → those issues' comments, matching PRD's "all sub-projects, issues,
+  comments, etc. are Soft Deleted." Verified via direct DB checks in testing.
+- `listMembers()` fetches email per member via `admin.auth.admin.getUserById` (looped,
+  not batched — fine at this team-size scale; `profiles` has no email column, it only
+  lives in `auth.users`).
+- **Bug found + fixed during manual testing**: `getUserTeams()` (backing `GET
+  /api/teams`) still returned the old stopgap shape (`{teamId, teamName, role}`) after
+  the rest of the team feature moved to the `TeamResponse` DTO — crashed
+  `TeamsPageClient`/`TeamCard` with `Cannot read properties of undefined (reading
+  'charAt')` since `team.name` didn't exist. Fixed by rewriting `getUserTeams()` to
+  return `TeamResponse[]` like every other team endpoint. This is a **shared
+  contract** — Dev B's `ProjectsPageClient.tsx` also calls `GET /api/teams` (to look
+  up a `teamId` for project creation) and read the old `.teamId` field; updated that
+  one line to read `.id` instead. Flag this specific change to Dev B since it's their
+  file — verified their project-creation flow still works against the new shape.
+- API routes: `POST /api/teams`, `GET/PATCH/DELETE /api/teams/:teamId`,
+  `POST /api/teams/:teamId/leave`, `GET /api/teams/:teamId/members`,
+  `DELETE /api/teams/:teamId/members/:userId` — all thin, matching the established
+  pattern.
+- UI: `/teams` (list + create modal), `/teams/:teamId` (layout with Overview/Members/
+  Settings tabs + overview stats), `/teams/:teamId/members` (table with role-scoped
+  kick buttons + leave button), `/teams/:teamId/settings` (rename + danger-zone
+  delete, OWNER/ADMIN gated both in the layout's tab visibility and again server-side
+  in the page itself for defense in depth). Sidebar's old "Members" stub (`href="#"`)
+  repointed to `/teams` — a standalone global "Members" page doesn't make sense until
+  there's a team-switcher/context; "Activity" stays a stub (FR-019, Day 4).
+- No invite flow yet (FR-013, Day 4) — admin/member test accounts were added directly
+  via `team_members` inserts during E2E testing, simulating an already-accepted invite.
+- E2E-tested via Playwright: full permission matrix (owner/admin/member kick rules,
+  self-kick prevention, owner-cannot-leave, non-owner-cannot-delete, FR-070 404 for
+  non-members) plus the three-level cascade-delete, all verified via direct DB
+  assertions — 20/20 passed. Separate UI smoke test through the actual create → tabs
+  → rename → delete flow — 7/7 passed.
 
 ## Task division (current)
 
@@ -194,8 +416,13 @@ developer runs commit/push/merge themselves.
 - AI provider not yet selected.
 - Merge strategy for Day 8 integration (incremental PRs vs. one big merge) — see
   `task-division.md` git workflow section; prefer incremental PRs per epic.
-- No push access to the GitHub repo yet — local commits only, Vercel not yet
-  connected. Day 0's "deploy empty shell" checklist item is blocked on this.
+- **Resolved 2026-07-02/03**: Eric didn't have push access to the original repo
+  (`sohyona/techvalley-jira`) — forked to `PhoneWaiYanMoe/techvalley-jira`. Local
+  remotes: `origin` = the fork (push here), `upstream` = the original repo (read-only
+  reference / eventual PR target). Vercel still not connected — now unblocked by the
+  fork, just not done yet.
+- Known lint errors in Dev B's `ProjectsPageClient.tsx` / `ProjectDashboard.tsx` — see
+  Day 2 section. Doesn't block `npm run build`.
 
 ## Git commit conventions
 Never add a Co-Authored-By: Claude trailer or "Generated with Claude Code" line to commit messages.

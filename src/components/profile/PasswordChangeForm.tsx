@@ -1,17 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { changePasswordSchema } from "@/validation/profile.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
 export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
+  const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   if (disabled) {
@@ -25,7 +27,6 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    setNotice(null);
 
     const parsed = changePasswordSchema.safeParse({
       currentPassword,
@@ -49,18 +50,21 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
       body: JSON.stringify(parsed.data),
     });
 
-    setSubmitting(false);
-
     if (!res.ok) {
+      setSubmitting(false);
       const body = await res.json().catch(() => null);
       setFormError(body?.error?.message ?? "Failed to change password");
       return;
     }
 
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setNotice("Password changed");
+    // Changing the password invalidates the current session server-side, so
+    // staying on the page would leave the user looking "logged in" until the
+    // next navigation silently bounced them to /login with no explanation.
+    // Sign out and redirect immediately instead, same pattern as the
+    // forgot-password reset flow.
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login?passwordChanged=true");
   }
 
   return (
@@ -95,7 +99,6 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
         required
       />
       {formError && <p className="text-sm text-red-600">{formError}</p>}
-      {notice && <p className="text-sm text-green-600">{notice}</p>}
       <Button type="submit" disabled={submitting} className="self-start">
         {submitting ? "Changing…" : "Change password"}
       </Button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { ProjectDashboardResponse, DashboardIssue } from "@/types/api";
+import type { ProjectDashboardResponse } from "@/types/api";
 import { StatusDonut } from "./StatusDonut";
 import { BarChart } from "./BarChart";
 
@@ -61,7 +61,9 @@ export function ProjectDashboard({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   useEffect(() => {
-    fetchData();
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   if (loading) {

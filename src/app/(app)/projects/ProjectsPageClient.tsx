@@ -44,7 +44,7 @@ export function ProjectsPageClient() {
       if (!res.ok) return;
       const data = await res.json();
       if (data.data?.length > 0 && !teamId) {
-        setTeamId(data.data[0].teamId);
+        setTeamId(data.data[0].id);
       }
     } catch {
       // ignore
@@ -52,8 +52,9 @@ export function ProjectsPageClient() {
   }, [teamId]);
 
   useEffect(() => {
-    fetchProjects();
-    fetchTeamId();
+    void (async () => {
+      await Promise.all([fetchProjects(), fetchTeamId()]);
+    })();
   }, [fetchProjects, fetchTeamId]);
 
   // Filter by tab

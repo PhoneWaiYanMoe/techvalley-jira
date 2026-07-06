@@ -21,3 +21,11 @@ export const changePasswordSchema = z
   });
 
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+// FR-007: Account Deletion — password omitted entirely for OAuth-only users
+// (they just confirm via a button, no field to validate).
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1).optional(),
+});
+
+export type DeleteAccountInput = z.infer<typeof deleteAccountSchema>;
