@@ -44,7 +44,7 @@ export function ProjectsPageClient() {
       if (!res.ok) return;
       const data = await res.json();
       if (data.data?.length > 0 && !teamId) {
-        setTeamId(data.data[0].teamId);
+        setTeamId(data.data[0].id);
       }
     } catch {
       // ignore

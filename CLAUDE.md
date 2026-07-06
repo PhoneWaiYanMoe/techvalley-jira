@@ -289,6 +289,71 @@ consistency).
   statuses but the design uses 4 ("In Review" — can be added as a custom status per
   FR-053), Members/Activity sidebar links are stubs pending Dev A's FR-014/FR-019.
 
+## Incident: Next.js accidentally downgraded to v9 (2026-07-05)
+
+Dev B's commit `555b9f3` ("update package.json") on branch `dev/akp`, merged into
+`dev/Eric` via `0fc771f`, changed `"next": "^16.2.10"` to `"next": "^9.3.3"` in
+`package.json` (and regenerated `package-lock.json` to match) — almost certainly an
+accidental edit, not intentional. Next.js 9 predates the App Router entirely
+(introduced in v13), so this would have broken the *entire* app — `proxy.ts`, route
+groups, Route Handlers, everything — the moment anyone ran `npm install`/`npm ci`
+fresh (a new clone, CI, or a Vercel deploy). Local `node_modules` still had 16.2.10
+installed at the time so nothing broke immediately, but this was a live landmine.
+**Fixed immediately** by restoring `"next": "^16.2.10"` and regenerating the lockfile.
+If a similar unexplained dependency version change shows up in a future pull, check
+`package.json`'s diff line-by-line before trusting it — don't assume `npm install`
+succeeding locally means the committed lockfile is safe.
+
+## Day 3 — Teams (done)
+
+FR-010 (create), FR-011 (update, OWNER/ADMIN), FR-012 (delete + cascade soft delete,
+OWNER only), FR-014 (member list), FR-015 (kick, role-scoped), FR-016 (leave,
+not OWNER).
+
+- `src/lib/team/team.service.ts` — Dev B's stopgap (`getUserTeams`, `getUserFirstTeam`,
+  `requireTeamMembership`) is now the **permanent home** for all team logic; extended
+  in place with `createTeam`, `getTeam`, `updateTeam`, `deleteTeam`, `listMembers`,
+  `kickMember`, `leaveTeam` rather than creating a competing `lib/teams/` (plural)
+  file per `folder-structure.md`'s original plan — avoids breaking Dev B's existing
+  `project.service.ts` import and matches the doc's own "one service file per
+  resource" rule better than splitting it would have.
+- `src/lib/permissions/team-role.ts` — small `isOwner`/`isOwnerOrAdmin` helpers used
+  throughout the service for permission checks (FR-011/012/015/016).
+- `deleteTeam()` cascades soft-delete three levels deep: team → its projects → those
+  projects' issues → those issues' comments, matching PRD's "all sub-projects, issues,
+  comments, etc. are Soft Deleted." Verified via direct DB checks in testing.
+- `listMembers()` fetches email per member via `admin.auth.admin.getUserById` (looped,
+  not batched — fine at this team-size scale; `profiles` has no email column, it only
+  lives in `auth.users`).
+- **Bug found + fixed during manual testing**: `getUserTeams()` (backing `GET
+  /api/teams`) still returned the old stopgap shape (`{teamId, teamName, role}`) after
+  the rest of the team feature moved to the `TeamResponse` DTO — crashed
+  `TeamsPageClient`/`TeamCard` with `Cannot read properties of undefined (reading
+  'charAt')` since `team.name` didn't exist. Fixed by rewriting `getUserTeams()` to
+  return `TeamResponse[]` like every other team endpoint. This is a **shared
+  contract** — Dev B's `ProjectsPageClient.tsx` also calls `GET /api/teams` (to look
+  up a `teamId` for project creation) and read the old `.teamId` field; updated that
+  one line to read `.id` instead. Flag this specific change to Dev B since it's their
+  file — verified their project-creation flow still works against the new shape.
+- API routes: `POST /api/teams`, `GET/PATCH/DELETE /api/teams/:teamId`,
+  `POST /api/teams/:teamId/leave`, `GET /api/teams/:teamId/members`,
+  `DELETE /api/teams/:teamId/members/:userId` — all thin, matching the established
+  pattern.
+- UI: `/teams` (list + create modal), `/teams/:teamId` (layout with Overview/Members/
+  Settings tabs + overview stats), `/teams/:teamId/members` (table with role-scoped
+  kick buttons + leave button), `/teams/:teamId/settings` (rename + danger-zone
+  delete, OWNER/ADMIN gated both in the layout's tab visibility and again server-side
+  in the page itself for defense in depth). Sidebar's old "Members" stub (`href="#"`)
+  repointed to `/teams` — a standalone global "Members" page doesn't make sense until
+  there's a team-switcher/context; "Activity" stays a stub (FR-019, Day 4).
+- No invite flow yet (FR-013, Day 4) — admin/member test accounts were added directly
+  via `team_members` inserts during E2E testing, simulating an already-accepted invite.
+- E2E-tested via Playwright: full permission matrix (owner/admin/member kick rules,
+  self-kick prevention, owner-cannot-leave, non-owner-cannot-delete, FR-070 404 for
+  non-members) plus the three-level cascade-delete, all verified via direct DB
+  assertions — 20/20 passed. Separate UI smoke test through the actual create → tabs
+  → rename → delete flow — 7/7 passed.
+
 ## Task division (current)
 
 - **Dev A** (Eric, branch `dev/Eric`): Auth (FR-001..007), Teams (FR-010..019),
