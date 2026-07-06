@@ -9,6 +9,27 @@ export type ProfileResponse = {
   email: string | null;
 };
 
+// --- Teams (FR-010..019) ---
+
+export type TeamRole = "OWNER" | "ADMIN" | "MEMBER";
+
+export type TeamResponse = {
+  id: string;
+  name: string;
+  ownerId: string;
+  createdAt: string;
+  myRole: TeamRole;
+  memberCount: number;
+};
+
+export type TeamMemberResponse = {
+  userId: string;
+  name: string;
+  email: string | null;
+  role: TeamRole;
+  joinedAt: string;
+};
+
 // --- Projects (FR-020..027) ---
 
 export type ProjectResponse = {
