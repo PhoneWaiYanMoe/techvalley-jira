@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { ApiError } from "@/lib/utils/errors";
 import { isOwner, isOwnerOrAdmin } from "@/lib/permissions/team-role";
+import { logActivity } from "@/lib/activity-log/activity-log.service";
 import type { TeamResponse, TeamMemberResponse, TeamRole } from "@/types/api";
 import type { CreateTeamInput, UpdateTeamInput } from "@/validation/team.schema";
 
@@ -163,6 +164,8 @@ export async function updateTeam(
     throw new ApiError(500, "DB_ERROR", "Failed to update team");
   }
 
+  await logActivity(teamId, userId, "TEAM_UPDATED", "team", teamId, { name: input.name });
+
   const memberCount = await getMemberCount(teamId);
   return toTeamResponse(team, role, memberCount);
 }
@@ -300,6 +303,9 @@ export async function kickMember(
   if (deleteError) {
     throw new ApiError(500, "DB_ERROR", "Failed to remove member");
   }
+
+  const targetName = await getProfileName(targetUserId);
+  await logActivity(teamId, actingUserId, "MEMBER_KICKED", "member", targetUserId, { targetName });
 }
 
 // FR-016 — ADMIN/MEMBER only. OWNER must delete the team instead.
@@ -323,4 +329,94 @@ export async function leaveTeam(teamId: string, userId: string): Promise<void> {
   if (error) {
     throw new ApiError(500, "DB_ERROR", "Failed to leave team");
   }
+
+  await logActivity(teamId, userId, "MEMBER_LEFT", "member", userId);
+}
+
+async function getProfileName(userId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin.from("profiles").select("name").eq("id", userId).maybeSingle();
+  return data?.name ?? null;
+}
+
+// FR-018 — OWNER only. Promote MEMBER<->ADMIN freely; setting a target to
+// OWNER transfers ownership (old owner becomes ADMIN), keeping exactly one
+// OWNER at all times. Cannot act on yourself — use transfer for that.
+export async function changeRole(
+  teamId: string,
+  actingUserId: string,
+  targetUserId: string,
+  newRole: TeamRole,
+): Promise<void> {
+  if (actingUserId === targetUserId) {
+    throw new ApiError(403, "FORBIDDEN", "You cannot change your own role");
+  }
+
+  const actingRole = await requireTeamMembership(actingUserId, teamId);
+  if (!isOwner(actingRole)) {
+    throw new ApiError(403, "FORBIDDEN", "Only the team owner can change member roles");
+  }
+
+  const admin = createAdminClient();
+  const { data: target, error: targetError } = await admin
+    .from("team_members")
+    .select("role")
+    .eq("team_id", teamId)
+    .eq("user_id", targetUserId)
+    .maybeSingle();
+
+  if (targetError || !target) {
+    throw new ApiError(404, "NOT_FOUND", "Member not found");
+  }
+
+  if (newRole === "OWNER") {
+    // Transfer ownership: target becomes OWNER, acting owner becomes ADMIN.
+    const { error: promoteError } = await admin
+      .from("team_members")
+      .update({ role: "OWNER" })
+      .eq("team_id", teamId)
+      .eq("user_id", targetUserId);
+    if (promoteError) {
+      throw new ApiError(500, "DB_ERROR", "Failed to transfer ownership");
+    }
+
+    await admin
+      .from("team_members")
+      .update({ role: "ADMIN" })
+      .eq("team_id", teamId)
+      .eq("user_id", actingUserId);
+
+    await admin.from("teams").update({ owner_id: targetUserId }).eq("id", teamId);
+
+    const targetName = await getProfileName(targetUserId);
+    await logActivity(teamId, actingUserId, "ROLE_CHANGED", "member", targetUserId, {
+      newRole: "OWNER",
+      targetName,
+    });
+    return;
+  }
+
+  if (target.role === "OWNER") {
+    throw new ApiError(
+      422,
+      "CANNOT_DEMOTE_OWNER",
+      "Transfer ownership to someone else before demoting the current owner",
+    );
+  }
+
+  const { error: updateError } = await admin
+    .from("team_members")
+    .update({ role: newRole })
+    .eq("team_id", teamId)
+    .eq("user_id", targetUserId);
+
+  if (updateError) {
+    throw new ApiError(500, "DB_ERROR", "Failed to update member role");
+  }
+
+  const targetName = await getProfileName(targetUserId);
+  await logActivity(teamId, actingUserId, "ROLE_CHANGED", "member", targetUserId, {
+    newRole,
+    targetName,
+  });
 }
