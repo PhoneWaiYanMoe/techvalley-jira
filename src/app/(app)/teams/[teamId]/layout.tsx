@@ -36,6 +36,7 @@ export default async function TeamLayout({
   const tabs = [
     { key: "overview", label: "Overview", href: `/teams/${teamId}` },
     { key: "members", label: "Members", href: `/teams/${teamId}/members` },
+    { key: "activity", label: "Activity", href: `/teams/${teamId}/activity` },
     ...(canManage ? [{ key: "settings", label: "Settings", href: `/teams/${teamId}/settings` }] : []),
   ];
 
