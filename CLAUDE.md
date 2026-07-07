@@ -354,6 +354,89 @@ not OWNER).
   assertions — 20/20 passed. Separate UI smoke test through the actual create → tabs
   → rename → delete flow — 7/7 passed.
 
+## Day 4 — Roles, invites, activity log (done)
+
+- `src/lib/activity-log/activity-log.service.ts` — `logActivity()` (best-effort, never
+  throws — a logging failure must not block the action that triggered it) and
+  `listActivity()` (cursor-paginated, newest first). Wired into `team.service.ts`'s
+  `updateTeam`/`kickMember`/`leaveTeam`/`changeRole` and `invite.service.ts`'s
+  `createInvite`/`acceptInvite`. Membership check for the activity API route lives in
+  the route itself (`requireTeamMembership`), not inside `activity-log.service.ts`,
+  to avoid a circular import with `team.service.ts` (which itself calls
+  `logActivity`).
+- **FR-018 role change** — `changeRole()` in `team.service.ts`, OWNER only. Promote/
+  demote MEMBER↔ADMIN freely; setting a target's role to `OWNER` is a special
+  transfer path (target becomes OWNER, acting owner becomes ADMIN, `teams.owner_id`
+  updated) — this is how "at least 1 OWNER" is maintained, since a demote-only demote
+  of the current OWNER is rejected (`CANNOT_DEMOTE_OWNER`) unless done via transfer.
+  Cannot act on your own role. UI: a `<select>` per member row in the Members table
+  (OWNER only), with an extra confirm step specifically for the OWNER-transfer option
+  since it's the one destructive-to-self choice.
+- **FR-013 invites** — `src/lib/invite/invite.service.ts` + `src/lib/email/send-invite-email.ts`.
+  Key architecture point: invite emails are sent by **our own backend** calling
+  SendGrid's HTTP API directly (`EMAIL_PROVIDER_API_KEY` + `EMAIL_SENDER_ADDRESS` env
+  vars) — this is separate from Supabase Auth's SMTP config, which only covers
+  Supabase's own signup-confirm/password-reset emails, not custom emails our code
+  sends. Used plain `fetch`, not `@sendgrid/mail`, to avoid a dependency for one API
+  call. `createInvite` upserts on the `(team_id, email)` unique constraint, so
+  inviting the same pending email again is a resend (bumps `expires_at` +7 days)
+  rather than a duplicate-row error, matching PRD's resend requirement. Accept flow
+  (FR-013's "Invite List" approve pattern, not a magic-link auto-join) lives at
+  `/invites` — any logged-in user sees invites matching their own email
+  (case-insensitive) via `GET /api/invites/mine`, and accepting upserts a
+  `team_members` row (`ignoreDuplicates: true` so a double-click can't error) then
+  marks the invite `ACCEPTED`. Expired or already-used invites are rejected (422).
+- **Email sending gap**: `.env.local` doesn't have `EMAIL_PROVIDER_API_KEY`/
+  `EMAIL_SENDER_ADDRESS` set yet as of this writing — `sendInviteEmail()` degrades
+  gracefully (logs an error, doesn't throw) when unset, so invite creation/accept
+  still works for testing, but no real email goes out until Eric adds these two vars
+  (same SendGrid API key already used for Supabase's SMTP, reused here for our own
+  backend's direct API calls).
+- E2E-tested via scratch Playwright (20/20 passed): promote/demote, self-role-change
+  blocked, ownership transfer (`teams.owner_id` + old-owner-demoted verified via
+  direct DB read), invite create/resend (expiry bump verified), full accept flow
+  (UI visibility → accept click → DB membership row + `ACCEPTED` status, all
+  verified directly), activity feed showing all of the above with correct
+  human-readable formatting and correct actor attribution.
+  - **Test-methodology note**: hit the same "insufficient wait time" false-negative
+    pattern as Day 1-3 — the accept flow's client-side `router.push()` to the new
+    team page needs several seconds on a cold route compile (multiple sequential
+    DB queries in the team layout). Fixed by using Playwright's `waitForURL()`
+    instead of a flat `waitForTimeout()`. Worth remembering for any future
+    post-mutation-redirect test: prefer `waitForURL`/`waitForResponse` over guessing
+    a timeout.
+- Sidebar gained an "Invites" nav item (`/invites`, own page — not team-scoped) next
+  to "Teams".
+
+## Dev B — Issues core (pulled 2026-07-06)
+
+Full write-up in `docs/session-log-2026-07-06.md`. Summary:
+
+- `src/lib/issue/issue.service.ts` + API routes (`/api/projects/:projectId/issues`,
+  `/api/issues/:issueId`, `/api/projects/:projectId/statuses`) — create/list/detail/
+  update/delete (FR-030..035), 200/project limit, assignee validated as a team member
+  (reuses Dev A's `requireTeamMembership`), archived projects reject writes,
+  `issue_history` rows written per changed field (real data ready for FR-039's Day 4
+  history tab).
+- UI: `/projects/:projectId/issues` list + create modal, `/projects/:projectId/issues/:issueId`
+  detail page (inline edit, optimistic status/assignee/priority updates, danger-zone
+  delete gated by server-computed `canDelete`).
+- **Fixed the `react-hooks/set-state-in-effect` lint errors** flagged earlier in this
+  file (`ProjectsPageClient`, `ProjectDashboard`) — repo-wide `npx eslint .` is now
+  clean, 0 errors/0 warnings. Pattern used: wrap the effect body in
+  `void (async () => { await load(); })()`.
+- **Flag for Eric**: `origin/main` still has the Next 9 downgrade (`555b9f3`, see Day 3
+  section above) — the fix only exists on `dev/Eric`. Needs a PR to `main` before any
+  Vercel deploy from main.
+- **Flag for Eric (Day 5, FR-090 notifications)**: issue assignment happens in
+  `createIssue`/`updateIssue` in `issue.service.ts` — hook notification triggers there.
+- E2E seed data left in the live DB for Dev B's own Day 3 kanban reuse: team "AKP E2E
+  Team (day2)", project "Day2 Issues E2E", users `akp.e2e.{owner,admin,creator,member,
+  outsider}@techvalley.test` — don't delete these as stray test data.
+- Known gaps (deliberate, per timeline): no search/filter/sort yet (FR-036, Day 4), no
+  labels yet (FR-038, Day 4), subtasks/comments/AI are placeholder cards, no kanban
+  board yet (Day 3 is next for Dev B).
+
 ## Task division (current)
 
 - **Dev A** (Eric, branch `dev/Eric`): Auth (FR-001..007), Teams (FR-010..019),
