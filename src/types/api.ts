@@ -30,6 +30,17 @@ export type TeamMemberResponse = {
   joinedAt: string;
 };
 
+export type InviteResponse = {
+  id: string;
+  teamId: string;
+  teamName?: string;
+  email: string;
+  role: TeamRole;
+  status: "PENDING" | "ACCEPTED";
+  expiresAt: string;
+  createdAt: string;
+};
+
 // --- Projects (FR-020..027) ---
 
 export type ProjectResponse = {
