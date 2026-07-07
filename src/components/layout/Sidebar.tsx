@@ -43,6 +43,17 @@ const NAV_ITEMS = [
     ),
   },
   {
+    key: "invites",
+    label: "Invites",
+    href: "/invites",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 4h16v16H4z" />
+        <path d="M4 6l8 6 8-6" />
+      </svg>
+    ),
+  },
+  {
     key: "activity",
     label: "Activity",
     href: "#",
@@ -72,7 +83,9 @@ export function Sidebar({
       ? "dashboard"
       : pathname.startsWith("/teams")
         ? "teams"
-        : "";
+        : pathname.startsWith("/invites")
+          ? "invites"
+          : "";
 
   return (
     <aside className="flex w-[250px] shrink-0 flex-col border-r border-neutral-200 bg-neutral-50 p-4 dark:border-neutral-800 dark:bg-neutral-900">
