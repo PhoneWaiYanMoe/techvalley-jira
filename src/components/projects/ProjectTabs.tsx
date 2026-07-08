@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// Project-scoped sub-nav (Board tab arrives with FR-050, Day 3)
+// Project-scoped sub-nav
 export function ProjectTabs({ projectId }: { projectId: string }) {
   const pathname = usePathname();
 
   const tabs = [
     { label: "Dashboard", href: `/projects/${projectId}`, exact: true },
+    { label: "Board", href: `/projects/${projectId}/board`, exact: false },
     { label: "Issues", href: `/projects/${projectId}/issues`, exact: false },
+    { label: "Settings", href: `/projects/${projectId}/settings`, exact: false },
   ];
 
   return (
