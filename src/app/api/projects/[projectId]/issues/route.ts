@@ -16,17 +16,37 @@ export async function POST(request: Request, { params }: RouteContext) {
   });
 }
 
-// GET /api/projects/:projectId/issues — issue list (FR-036 filters arrive Day 4)
+// GET /api/projects/:projectId/issues — issue list with search/filter/sort (FR-036)
 export async function GET(request: Request, { params }: RouteContext) {
   return withApiErrorHandling(async () => {
     const user = await requireUser();
     const { projectId } = await params;
-    const url = new URL(request.url);
-    const cursor = url.searchParams.get("cursor");
-    const limitParam = url.searchParams.get("limit");
+    const q = new URL(request.url).searchParams;
+
+    const sortParam = q.get("sort");
+    const sort =
+      sortParam === "due" || sortParam === "priority" || sortParam === "updated"
+        ? sortParam
+        : "created";
+    const priorityParam = q.get("priority");
+    const priority =
+      priorityParam === "HIGH" || priorityParam === "MEDIUM" || priorityParam === "LOW"
+        ? priorityParam
+        : undefined;
+
+    const limitParam = q.get("limit");
     const result = await listIssues(projectId, user.id, {
-      cursor,
+      cursor: q.get("cursor"),
       limit: limitParam ? Number(limitParam) : undefined,
+      status: q.get("status") ?? undefined,
+      assignee: q.get("assignee") ?? undefined,
+      priority,
+      label: q.get("label") ?? undefined,
+      hasDueDate: q.get("hasDueDate") === "true" ? true : undefined,
+      dueFrom: q.get("dueFrom") ?? undefined,
+      dueTo: q.get("dueTo") ?? undefined,
+      search: q.get("search") ?? undefined,
+      sort,
     });
     return Response.json(result);
   });
