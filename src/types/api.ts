@@ -41,6 +41,27 @@ export type InviteResponse = {
   createdAt: string;
 };
 
+// --- Notifications (FR-090, FR-091) ---
+
+export type NotificationType =
+  | "ISSUE_ASSIGNED"
+  | "ISSUE_COMMENT"
+  | "DUE_SOON"
+  | "DUE_TODAY"
+  | "TEAM_INVITE"
+  | "ROLE_CHANGED";
+
+export type NotificationResponse = {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string | null;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
 // --- Projects (FR-020..027) ---
 
 export type ProjectResponse = {
