@@ -104,6 +104,7 @@ client directly from the frontend — no custom API route needed for those
 |---|---|---|---|---|
 | POST | `/api/projects/:projectId/issues` | `{ title, description?, assigneeUserId?, dueDate?, priority?, labelIds? }` | issue | FR-030 (`422` if 200/project hit) |
 | GET | `/api/projects/:projectId/issues?status=&assignee=&priority=&label=&hasDueDate=&dueFrom=&dueTo=&search=&sort=&cursor=` | — | paginated issue list, incl. `total` (for the x/200 counter; filters/sort land with FR-036) | FR-036 |
+| GET | `/api/projects/:projectId/board` | — | `{ statuses, issues }` — all cards (title, assignee, priority, labels, dueDate, subtaskProgress, position) grouped client-side by `statusId` for the kanban board | FR-050 |
 | GET | `/api/issues/:issueId` | — | full detail incl. subtasks, labels, comment count | FR-031 |
 | PATCH | `/api/issues/:issueId` | any editable field | updated issue (writes `issue_history` per changed field) | FR-032/039 |
 | DELETE | `/api/issues/:issueId` | — | `204` | FR-035 |
