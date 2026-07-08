@@ -408,6 +408,55 @@ not OWNER).
 - Sidebar gained an "Invites" nav item (`/invites`, own page — not team-scoped) next
   to "Teams".
 
+## Day 5 — Notifications (done)
+
+- `src/lib/notification/notification.service.ts` — `createNotification()` (best-effort,
+  same non-throwing pattern as activity-log), `listNotifications()` (cursor-paginated,
+  returns `unreadCount` alongside the page per `api.md`), `markAsRead()`/
+  `markAllAsRead()` (FR-091, scoped to the caller's own `user_id`).
+- **FR-090 triggers wired to their real sources**:
+  - `ROLE_CHANGED` — both branches of `changeRole()` in `team.service.ts` (plain
+    promote/demote and the OWNER-transfer path).
+  - `TEAM_INVITE` — `createInvite()` in `invite.service.ts`. Only fires if the
+    invited email already belongs to a registered user — resolved via a
+    `findUserIdByEmail()` helper that pages through `admin.auth.admin.listUsers()`
+    (the admin SDK has no direct "get user by email"; fine at this project's scale).
+    If the email isn't registered yet, the invite email is still sent — they just
+    don't get an in-app notification since there's no account to attach it to.
+  - `ISSUE_ASSIGNED` — **touches Dev B's `src/lib/issue/issue.service.ts`**, exactly
+    where their Day 2 session log flagged for me: one hook in `createIssue` (fires if
+    created with an assignee) and one in `updateIssue` (fires only when the assignee
+    actually changes to a non-null value — not on unassignment). Both are minimal,
+    additive `createNotification()` calls; no existing logic touched.
+  - `ISSUE_COMMENT` — **not wired yet**, comments don't exist in the codebase yet
+    (Dev B's Day 5 scope, not landed as of this writing). Hook point once it exists:
+    wherever `createComment()` ends up, notify the issue's assignee and creator
+    (skip the commenter themselves).
+  - `DUE_SOON` / `DUE_TODAY` — structurally different from the others: not fired by
+    a user action, needs to run once a day. `src/lib/notification/due-date-check.service.ts`
+    does the actual query (skips archived projects and `Done`-status issues) with
+    **idempotency built in** (checks for an existing same-day notification of that
+    type+issue+user before creating another, since the check might run more than
+    once a day). Exposed via `POST /api/notifications/check-due-dates`, protected by
+    a `CRON_SECRET` header check (no logged-in "actor" for a scheduled job, so the
+    normal `requireUser()` pattern does't apply) — **not yet wired to an actual
+    scheduler**. Vercel Cron is the natural fit but needs the app deployed first
+    (still pending, see "Known limitations"). Until then this has to be triggered
+    manually or via any external HTTP-capable cron pointed at the deployed URL once
+    it exists.
+- UI: `NotificationBell.tsx` in the sidebar's logo row (bell icon + unread-count
+  badge + dropdown of the 8 most recent, "Mark all read" + "View all"), and a full
+  paginated `/notifications` page for FR-091's mark-as-read requirements. Clicking a
+  notification marks it read and navigates to the related entity — issue
+  notifications only store an `issueId`, but the actual route is
+  `/projects/:projectId/issues/:issueId`, so the click handler fetches
+  `/api/issues/:issueId` first to resolve the `projectId` before navigating.
+- E2E-tested via scratch Playwright (22/22 passed, no timing false-negatives this
+  time): all four wired triggers verified via direct DB reads, cron endpoint's
+  secret check (401 on wrong/missing secret) and idempotency (second run same-day
+  creates zero duplicates) verified, mark-all-read verified both in the UI and via
+  direct DB read, bell badge confirmed hidden after mark-all-read.
+
 ## Dev B — Issues core (pulled 2026-07-06)
 
 Full write-up in `docs/session-log-2026-07-06.md`. Summary:
@@ -504,8 +553,15 @@ developer runs commit/push/merge themselves.
   remotes: `origin` = the fork (push here), `upstream` = the original repo (read-only
   reference / eventual PR target). Vercel still not connected — now unblocked by the
   fork, just not done yet.
-- Known lint errors in Dev B's `ProjectsPageClient.tsx` / `ProjectDashboard.tsx` — see
-  Day 2 section. Doesn't block `npm run build`.
+- **Resolved 2026-07-06**: the `react-hooks/set-state-in-effect` lint errors flagged
+  in the Day 2 section were fixed by Dev B — `npx eslint .` is 0 errors/0 warnings
+  as of Day 5.
+- **FR-090 due-soon/due-today notifications aren't on a real schedule yet** —
+  `POST /api/notifications/check-due-dates` (see Day 5 section) needs an external
+  cron to call it daily. Vercel Cron is the natural fit but needs the app deployed
+  first, which is blocked on the same "Vercel not connected yet" item above. Until
+  then, trigger it manually (with the `CRON_SECRET` header) if due-date notifications
+  need to be demonstrated.
 
 ## Git commit conventions
 Never add a Co-Authored-By: Claude trailer or "Generated with Claude Code" line to commit messages.

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { Avatar } from "@/components/ui/Avatar";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 
 const NAV_ITEMS = [
   {
@@ -94,7 +95,8 @@ export function Sidebar({
         <div className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-indigo-600 text-sm font-extrabold text-white">
           T
         </div>
-        <span className="text-[15px] font-bold tracking-tight">TechValley</span>
+        <span className="flex-1 text-[15px] font-bold tracking-tight">TechValley</span>
+        <NotificationBell />
       </div>
 
       {/* Workspace label */}
