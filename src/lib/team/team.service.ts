@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ApiError } from "@/lib/utils/errors";
 import { isOwner, isOwnerOrAdmin } from "@/lib/permissions/team-role";
 import { logActivity } from "@/lib/activity-log/activity-log.service";
+import { createNotification } from "@/lib/notification/notification.service";
 import type { TeamResponse, TeamMemberResponse, TeamRole } from "@/types/api";
 import type { CreateTeamInput, UpdateTeamInput } from "@/validation/team.schema";
 
@@ -393,6 +394,14 @@ export async function changeRole(
       newRole: "OWNER",
       targetName,
     });
+    await createNotification(
+      targetUserId,
+      "ROLE_CHANGED",
+      "You are now the team owner",
+      undefined,
+      "team",
+      teamId,
+    );
     return;
   }
 
@@ -419,4 +428,12 @@ export async function changeRole(
     newRole,
     targetName,
   });
+  await createNotification(
+    targetUserId,
+    "ROLE_CHANGED",
+    `Your role was changed to ${newRole}`,
+    undefined,
+    "team",
+    teamId,
+  );
 }

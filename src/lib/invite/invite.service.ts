@@ -4,10 +4,29 @@ import { isOwnerOrAdmin } from "@/lib/permissions/team-role";
 import { requireTeamMembership } from "@/lib/team/team.service";
 import { logActivity } from "@/lib/activity-log/activity-log.service";
 import { sendInviteEmail } from "@/lib/email/send-invite-email";
+import { createNotification } from "@/lib/notification/notification.service";
 import type { InviteResponse, TeamRole } from "@/types/api";
 import type { CreateInviteInput } from "@/validation/team.schema";
 
 const INVITE_EXPIRY_DAYS = 7;
+
+// No getUserByEmail in the admin SDK, only paginated listUsers — fine at
+// this project's scale (used only to decide whether to also fire an
+// in-app FR-090 notification for an existing user; email always sends
+// regardless).
+async function findUserIdByEmail(email: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const target = email.toLowerCase();
+
+  for (let page = 1; page <= 10; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error || !data) break;
+    const match = data.users.find((u) => u.email?.toLowerCase() === target);
+    if (match) return match.id;
+    if (data.users.length < 200) break;
+  }
+  return null;
+}
 
 function toInviteResponse(row: {
   id: string;
@@ -81,6 +100,21 @@ export async function createInvite(
   await logActivity(teamId, actingUserId, "INVITE_SENT", "invite", invite.id, {
     email: input.email,
   });
+
+  // FR-090 — only fires if the invited email already belongs to a
+  // registered user; otherwise the email itself is the only notice they
+  // get until they sign up.
+  const existingUserId = await findUserIdByEmail(input.email);
+  if (existingUserId) {
+    await createNotification(
+      existingUserId,
+      "TEAM_INVITE",
+      `You've been invited to join ${team.name}`,
+      undefined,
+      "team",
+      teamId,
+    );
+  }
 
   return toInviteResponse({ ...invite, teams: { name: team.name } });
 }
