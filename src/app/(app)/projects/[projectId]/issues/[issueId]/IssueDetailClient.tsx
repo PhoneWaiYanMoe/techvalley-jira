@@ -6,10 +6,15 @@ import type {
   IssueDetailResponse,
   IssueResponse,
   IssueStatusOption,
+  LabelResponse,
   TeamMemberResponse,
 } from "@/types/api";
 import { ProjectTabs } from "@/components/projects/ProjectTabs";
 import { PriorityDot, DueBadge } from "@/components/issues/IssueBadges";
+import { LabelPicker } from "@/components/labels/LabelPicker";
+import { SubtaskList } from "@/components/subtasks/SubtaskList";
+import { IssueHistory } from "@/components/issues/IssueHistory";
+import type { SubtaskResponse } from "@/types/api";
 import type { UpdateIssueInput } from "@/validation/issue.schema";
 
 const controlClass =
@@ -34,6 +39,7 @@ export function IssueDetailClient({
   const [issue, setIssue] = useState<IssueDetailResponse | null>(null);
   const [statuses, setStatuses] = useState<IssueStatusOption[]>([]);
   const [members, setMembers] = useState<TeamMemberResponse[]>([]);
+  const [availableLabels, setAvailableLabels] = useState<LabelResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -48,9 +54,10 @@ export function IssueDetailClient({
 
   const load = useCallback(async () => {
     try {
-      const [issueRes, statusRes] = await Promise.all([
+      const [issueRes, statusRes, labelRes] = await Promise.all([
         fetch(`/api/issues/${issueId}`),
         fetch(`/api/projects/${projectId}/statuses`),
+        fetch(`/api/projects/${projectId}/labels`),
       ]);
       if (!issueRes.ok) {
         const d = await issueRes.json();
@@ -60,6 +67,7 @@ export function IssueDetailClient({
       setIssue(detail);
       setDescDraft(detail.description ?? "");
       if (statusRes.ok) setStatuses(await statusRes.json());
+      if (labelRes.ok) setAvailableLabels(await labelRes.json());
 
       // Assignee options = the project's team members (FR-034)
       const memberRes = await fetch(`/api/teams/${detail.teamId}/members`);
@@ -124,6 +132,29 @@ export function IssueDetailClient({
       setSaveError(err instanceof Error ? err.message : "Failed to delete issue");
       setDeleting(false);
       setConfirmDelete(false);
+    }
+  }
+
+  // FR-038: replace-set the issue's labels.
+  async function handleLabelsChange(ids: string[]) {
+    if (!issue || readOnly) return;
+    const prev = issue;
+    const nextLabels = availableLabels.filter((l) => ids.includes(l.id));
+    setIssue({ ...issue, labels: nextLabels });
+    setSaveError(null);
+    try {
+      const res = await fetch(`/api/issues/${issueId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ labelIds: ids }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error?.message ?? "Failed to update labels");
+      }
+    } catch (err) {
+      setIssue(prev);
+      setSaveError(err instanceof Error ? err.message : "Failed to update labels");
     }
   }
 
@@ -251,15 +282,14 @@ export function IssueDetailClient({
             </div>
           </div>
 
-          {/* Subtasks — FR-039-2, Day 4 */}
+          {/* Subtasks — FR-039-2 */}
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="text-[13.5px] font-bold">
-              Subtasks{" "}
-              <span className="font-mono text-[11px] font-normal text-neutral-400">
-                {issue.subtasks.length}/20
-              </span>
-            </h2>
-            <p className="mt-2 text-[12.8px] text-neutral-400">Subtask checklist coming soon.</p>
+            <SubtaskList
+              issueId={issueId}
+              subtasks={issue.subtasks}
+              setSubtasks={(subtasks: SubtaskResponse[]) => setIssue({ ...issue, subtasks })}
+              readOnly={readOnly}
+            />
           </div>
 
           {/* Comments — FR-060..063, Day 5 */}
@@ -272,6 +302,9 @@ export function IssueDetailClient({
             </h2>
             <p className="mt-2 text-[12.8px] text-neutral-400">Comments coming soon.</p>
           </div>
+
+          {/* Change history — FR-039 */}
+          <IssueHistory issueId={issueId} />
         </div>
 
         {/* Sidebar */}
@@ -344,6 +377,18 @@ export function IssueDetailClient({
                     className={controlClass}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-neutral-500">Labels</label>
+                <LabelPicker
+                  projectId={projectId}
+                  available={availableLabels}
+                  selectedIds={issue.labels.map((l) => l.id)}
+                  onChange={(ids) => void handleLabelsChange(ids)}
+                  onCreated={(label) => setAvailableLabels((prev) => [...prev, label])}
+                  disabled={readOnly}
+                />
               </div>
 
               <div className="border-t border-neutral-100 pt-3.5 dark:border-neutral-800">

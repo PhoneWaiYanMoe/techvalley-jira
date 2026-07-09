@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { IssueResponse, TeamMemberResponse } from "@/types/api";
+import type { IssueResponse, LabelResponse, TeamMemberResponse } from "@/types/api";
+import { LabelPicker } from "@/components/labels/LabelPicker";
 
 const selectClass =
   "w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[13px] text-neutral-900 outline-none focus:ring-2 focus:ring-neutral-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-600";
@@ -23,6 +24,8 @@ export function CreateIssueModal({
   const [assigneeId, setAssigneeId] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [members, setMembers] = useState<TeamMemberResponse[]>([]);
+  const [labels, setLabels] = useState<LabelResponse[]>([]);
+  const [labelIds, setLabelIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -39,6 +42,20 @@ export function CreateIssueModal({
       cancelled = true;
     };
   }, [teamId]);
+
+  // FR-038: project labels available to attach
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/labels`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: LabelResponse[]) => {
+        if (!cancelled) setLabels(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const disabled = !title.trim() || submitting;
 
@@ -57,6 +74,7 @@ export function CreateIssueModal({
           priority,
           assigneeUserId: assigneeId || undefined,
           dueDate: dueDate || undefined,
+          labelIds: labelIds.length > 0 ? labelIds : undefined,
         }),
       });
 
@@ -165,6 +183,20 @@ export function CreateIssueModal({
             </option>
           ))}
         </select>
+
+        {/* Labels (FR-038) */}
+        <label className="mb-1.5 block text-xs font-bold text-neutral-500">
+          Labels <span className="font-normal text-neutral-400">· optional</span>
+        </label>
+        <div className="mb-5">
+          <LabelPicker
+            projectId={projectId}
+            available={labels}
+            selectedIds={labelIds}
+            onChange={setLabelIds}
+            onCreated={(label) => setLabels((prev) => [...prev, label])}
+          />
+        </div>
 
         {/* Error */}
         {formError && <p className="mb-3 text-sm text-red-600">{formError}</p>}
