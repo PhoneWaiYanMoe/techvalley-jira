@@ -354,6 +354,231 @@ not OWNER).
   assertions — 20/20 passed. Separate UI smoke test through the actual create → tabs
   → rename → delete flow — 7/7 passed.
 
+## Day 4 — Roles, invites, activity log (done)
+
+- `src/lib/activity-log/activity-log.service.ts` — `logActivity()` (best-effort, never
+  throws — a logging failure must not block the action that triggered it) and
+  `listActivity()` (cursor-paginated, newest first). Wired into `team.service.ts`'s
+  `updateTeam`/`kickMember`/`leaveTeam`/`changeRole` and `invite.service.ts`'s
+  `createInvite`/`acceptInvite`. Membership check for the activity API route lives in
+  the route itself (`requireTeamMembership`), not inside `activity-log.service.ts`,
+  to avoid a circular import with `team.service.ts` (which itself calls
+  `logActivity`).
+- **FR-018 role change** — `changeRole()` in `team.service.ts`, OWNER only. Promote/
+  demote MEMBER↔ADMIN freely; setting a target's role to `OWNER` is a special
+  transfer path (target becomes OWNER, acting owner becomes ADMIN, `teams.owner_id`
+  updated) — this is how "at least 1 OWNER" is maintained, since a demote-only demote
+  of the current OWNER is rejected (`CANNOT_DEMOTE_OWNER`) unless done via transfer.
+  Cannot act on your own role. UI: a `<select>` per member row in the Members table
+  (OWNER only), with an extra confirm step specifically for the OWNER-transfer option
+  since it's the one destructive-to-self choice.
+- **FR-013 invites** — `src/lib/invite/invite.service.ts` + `src/lib/email/send-invite-email.ts`.
+  Key architecture point: invite emails are sent by **our own backend** calling
+  SendGrid's HTTP API directly (`EMAIL_PROVIDER_API_KEY` + `EMAIL_SENDER_ADDRESS` env
+  vars) — this is separate from Supabase Auth's SMTP config, which only covers
+  Supabase's own signup-confirm/password-reset emails, not custom emails our code
+  sends. Used plain `fetch`, not `@sendgrid/mail`, to avoid a dependency for one API
+  call. `createInvite` upserts on the `(team_id, email)` unique constraint, so
+  inviting the same pending email again is a resend (bumps `expires_at` +7 days)
+  rather than a duplicate-row error, matching PRD's resend requirement. Accept flow
+  (FR-013's "Invite List" approve pattern, not a magic-link auto-join) lives at
+  `/invites` — any logged-in user sees invites matching their own email
+  (case-insensitive) via `GET /api/invites/mine`, and accepting upserts a
+  `team_members` row (`ignoreDuplicates: true` so a double-click can't error) then
+  marks the invite `ACCEPTED`. Expired or already-used invites are rejected (422).
+- **Email sending gap**: `.env.local` doesn't have `EMAIL_PROVIDER_API_KEY`/
+  `EMAIL_SENDER_ADDRESS` set yet as of this writing — `sendInviteEmail()` degrades
+  gracefully (logs an error, doesn't throw) when unset, so invite creation/accept
+  still works for testing, but no real email goes out until Eric adds these two vars
+  (same SendGrid API key already used for Supabase's SMTP, reused here for our own
+  backend's direct API calls).
+- E2E-tested via scratch Playwright (20/20 passed): promote/demote, self-role-change
+  blocked, ownership transfer (`teams.owner_id` + old-owner-demoted verified via
+  direct DB read), invite create/resend (expiry bump verified), full accept flow
+  (UI visibility → accept click → DB membership row + `ACCEPTED` status, all
+  verified directly), activity feed showing all of the above with correct
+  human-readable formatting and correct actor attribution.
+  - **Test-methodology note**: hit the same "insufficient wait time" false-negative
+    pattern as Day 1-3 — the accept flow's client-side `router.push()` to the new
+    team page needs several seconds on a cold route compile (multiple sequential
+    DB queries in the team layout). Fixed by using Playwright's `waitForURL()`
+    instead of a flat `waitForTimeout()`. Worth remembering for any future
+    post-mutation-redirect test: prefer `waitForURL`/`waitForResponse` over guessing
+    a timeout.
+- Sidebar gained an "Invites" nav item (`/invites`, own page — not team-scoped) next
+  to "Teams".
+
+## Day 5 — Notifications (done)
+
+- `src/lib/notification/notification.service.ts` — `createNotification()` (best-effort,
+  same non-throwing pattern as activity-log), `listNotifications()` (cursor-paginated,
+  returns `unreadCount` alongside the page per `api.md`), `markAsRead()`/
+  `markAllAsRead()` (FR-091, scoped to the caller's own `user_id`).
+- **FR-090 triggers wired to their real sources**:
+  - `ROLE_CHANGED` — both branches of `changeRole()` in `team.service.ts` (plain
+    promote/demote and the OWNER-transfer path).
+  - `TEAM_INVITE` — `createInvite()` in `invite.service.ts`. Only fires if the
+    invited email already belongs to a registered user — resolved via a
+    `findUserIdByEmail()` helper that pages through `admin.auth.admin.listUsers()`
+    (the admin SDK has no direct "get user by email"; fine at this project's scale).
+    If the email isn't registered yet, the invite email is still sent — they just
+    don't get an in-app notification since there's no account to attach it to.
+  - `ISSUE_ASSIGNED` — **touches Dev B's `src/lib/issue/issue.service.ts`**, exactly
+    where their Day 2 session log flagged for me: one hook in `createIssue` (fires if
+    created with an assignee) and one in `updateIssue` (fires only when the assignee
+    actually changes to a non-null value — not on unassignment). Both are minimal,
+    additive `createNotification()` calls; no existing logic touched.
+  - `ISSUE_COMMENT` — **not wired yet**, comments don't exist in the codebase yet
+    (Dev B's Day 5 scope, not landed as of this writing). Hook point once it exists:
+    wherever `createComment()` ends up, notify the issue's assignee and creator
+    (skip the commenter themselves).
+  - `DUE_SOON` / `DUE_TODAY` — structurally different from the others: not fired by
+    a user action, needs to run once a day. `src/lib/notification/due-date-check.service.ts`
+    does the actual query (skips archived projects and `Done`-status issues) with
+    **idempotency built in** (checks for an existing same-day notification of that
+    type+issue+user before creating another, since the check might run more than
+    once a day). Exposed via `POST /api/notifications/check-due-dates`, protected by
+    a `CRON_SECRET` header check (no logged-in "actor" for a scheduled job, so the
+    normal `requireUser()` pattern does't apply) — **not yet wired to an actual
+    scheduler**. Vercel Cron is the natural fit but needs the app deployed first
+    (still pending, see "Known limitations"). Until then this has to be triggered
+    manually or via any external HTTP-capable cron pointed at the deployed URL once
+    it exists.
+- UI: `NotificationBell.tsx` in the sidebar's logo row (bell icon + unread-count
+  badge + dropdown of the 8 most recent, "Mark all read" + "View all"), and a full
+  paginated `/notifications` page for FR-091's mark-as-read requirements. Clicking a
+  notification marks it read and navigates to the related entity — issue
+  notifications only store an `issueId`, but the actual route is
+  `/projects/:projectId/issues/:issueId`, so the click handler fetches
+  `/api/issues/:issueId` first to resolve the `projectId` before navigating.
+- E2E-tested via scratch Playwright (22/22 passed, no timing false-negatives this
+  time): all four wired triggers verified via direct DB reads, cron endpoint's
+  secret check (401 on wrong/missing secret) and idempotency (second run same-day
+  creates zero duplicates) verified, mark-all-read verified both in the UI and via
+  direct DB read, bell badge confirmed hidden after mark-all-read.
+
+## Dev B — Issues core (pulled 2026-07-06)
+
+Full write-up in `docs/session-log-2026-07-06.md`. Summary:
+
+- `src/lib/issue/issue.service.ts` + API routes (`/api/projects/:projectId/issues`,
+  `/api/issues/:issueId`, `/api/projects/:projectId/statuses`) — create/list/detail/
+  update/delete (FR-030..035), 200/project limit, assignee validated as a team member
+  (reuses Dev A's `requireTeamMembership`), archived projects reject writes,
+  `issue_history` rows written per changed field (real data ready for FR-039's Day 4
+  history tab).
+- UI: `/projects/:projectId/issues` list + create modal, `/projects/:projectId/issues/:issueId`
+  detail page (inline edit, optimistic status/assignee/priority updates, danger-zone
+  delete gated by server-computed `canDelete`).
+- **Fixed the `react-hooks/set-state-in-effect` lint errors** flagged earlier in this
+  file (`ProjectsPageClient`, `ProjectDashboard`) — repo-wide `npx eslint .` is now
+  clean, 0 errors/0 warnings. Pattern used: wrap the effect body in
+  `void (async () => { await load(); })()`.
+- **Flag for Eric**: `origin/main` still has the Next 9 downgrade (`555b9f3`, see Day 3
+  section above) — the fix only exists on `dev/Eric`. Needs a PR to `main` before any
+  Vercel deploy from main.
+- **Flag for Eric (Day 5, FR-090 notifications)**: issue assignment happens in
+  `createIssue`/`updateIssue` in `issue.service.ts` — hook notification triggers there.
+- E2E seed data left in the live DB for Dev B's own Day 3 kanban reuse: team "AKP E2E
+  Team (day2)", project "Day2 Issues E2E", users `akp.e2e.{owner,admin,creator,member,
+  outsider}@techvalley.test` — don't delete these as stray test data.
+- Known gaps (deliberate, per timeline): no search/filter/sort yet (FR-036, Day 4), no
+  labels yet (FR-038, Day 4), subtasks/comments/AI are placeholder cards, no kanban
+  board yet (Day 3 is next for Dev B).
+
+## Day 6 — Dashboards (done)
+
+FR-081 (personal dashboard), FR-082 (team statistics with 7/30/90-day period
+selector).
+
+- `src/lib/dashboard/dashboard.service.ts` — new service, `getPersonalDashboard()`
+  and `getTeamStats()`. Didn't extend `team.service.ts` or `project.service.ts` for
+  this — `api.md` already groups FR-081/082 under their own "Dashboards" section
+  distinct from Teams/Projects, and the personal dashboard in particular spans
+  teams + projects + issues + comments, so a dedicated file fit the existing
+  "one service file per resource" rule better than bolting it onto an unrelated one.
+- **Personal dashboard (FR-081)** — `GET /api/dashboard/personal`. Assigned issues
+  are scoped to non-archived projects only (same convention as the FR-090
+  due-date-check cron: archived-project work is read-only, so it doesn't belong in
+  an actionable "my work" view). Due-today/due-soon exclude `Done`-status issues,
+  also matching that cron's logic. **Recent comments**: the `comments` table exists
+  in `schema.sql` but has no service/API layer yet — that's Dev B's Day 5 scope,
+  not landed as of this writing (confirmed via search, no `comment*` files anywhere
+  under `src/`). Read the table directly with the admin client rather than block
+  on that service existing; revisit once Dev B's comments feature lands (probably
+  fine to leave as-is, just re-verify the query still matches the eventual schema).
+- **Team statistics (FR-082)** — `GET /api/teams/:teamId/stats?period=7|30|90`, any
+  team member can view (matches other team-scoped GETs). Query param validated with
+  a plain `parsePeriod()` function (invalid/missing → defaults to 30), not zod —
+  matches the existing convention in the issues list route for filter params.
+  Semantics settled on:
+  - `creationTrend`/`completionTrend`: period-scoped daily counts, zero-filled for
+    every day in range (better for a line chart than sparse points). Completion is
+    derived from `issue_history` (`field_name='status' AND new_value='Done'`) since
+    `issues` has no `completed_at` column.
+  - `assignedPerMember`: **not** period-scoped — a live snapshot of current open
+    (non-Done) workload, matching FR-080's `workloadByAssignee` framing.
+  - `completedPerMember`: period-scoped, attributed to the issue's **current
+    assignee** (not whoever clicked the status dropdown) — kept consistent with
+    `assignedPerMember`'s assignee-centric framing rather than a "who did the
+    click" audit.
+  - `statusPerProject`: live snapshot, one row per team project (even with 0
+    issues), status colors fall back to the same `Backlog/In Progress/In
+    Review/Done` palette used in `project.service.ts` when a default status's
+    `color` column is null (it's seeded null in `schema.sql`).
+- UI: `/dashboard` is no longer a redirect to `/projects` — it's now the real
+  personal dashboard (`PersonalDashboardClient.tsx`), reusing Dev B's
+  `StatusDonut`/`BarChart` components rather than rebuilding them. New "Statistics"
+  tab added to the team layout's tab bar (`/teams/:teamId/statistics`,
+  `TeamStatsClient.tsx`) with a period-selector pill control, two `LineChart`
+  trend graphs (new small SVG component, no chart library — matches the existing
+  `StatusDonut`/`BarChart` house style of hand-rolled CSS/SVG over a dependency),
+  and reused `BarChart` for the per-member breakdowns.
+- E2E-tested via scratch Playwright (31/31 passed): personal dashboard's assigned
+  count/status grouping/due-today/due-soon/recent-comments/teams/projects all
+  verified against seeded data with direct DB assertions; team stats' creation and
+  completion trend totals, assigned/completed-per-member attribution, and
+  status-per-project breakdown all verified for both `period=7` and `period=90`;
+  UI screenshots confirmed both pages render correctly end-to-end including the
+  period-selector click-through.
+- **Dev-server gotcha hit during testing**: added `src/app/api/teams/[teamId]/stats/route.ts`
+  while a `next dev` (Turbopack) instance was already running — it 404'd on an
+  unrelated sibling route (`POST /api/teams/:teamId/projects`) with Next's own
+  not-found HTML page (not our JSON error envelope) until the dev server was
+  restarted with a cleared `.next` cache. If a route that definitely exists on disk
+  404s with an HTML body instead of a JSON error, suspect a stale Turbopack route
+  manifest before assuming a real bug — restart `next dev` first.
+
+## Dev B — Kanban, labels, subtasks, issue history, settings (pulled 2026-07-09)
+
+Large drop covering FR-036 (search/filter/sort), FR-038 (labels), FR-039 (issue
+history), FR-039-2 (subtasks), FR-050..054 (kanban board incl. custom statuses/WIP
+limits/drag-drop), and a project settings page. One merge conflict, resolved:
+
+- **Conflict**: `src/lib/issue/issue.service.ts`'s `createIssue()` — my Day 5
+  `ISSUE_ASSIGNED` notification hook (HEAD) vs. Dev B's Day 3 FR-038 label-linking
+  (`syncIssueLabels`) touched the same post-insert block. Not mutually exclusive;
+  resolved by keeping both (labels linked first, then the assignee notification
+  fires) — no logic lost on either side.
+- New dependency `@hello-pangea/dnd` (drag-and-drop for the kanban board) — required
+  `npm install` after the pull, since the lockfile alone doesn't add it to
+  `node_modules`. If a fresh pull ever fails to compile with `Cannot find module
+  '@hello-pangea/dnd'`, this is why — run `npm install` first.
+- New service files: `src/lib/label/label.service.ts`, `src/lib/status/status.service.ts`,
+  `src/lib/subtask/subtask.service.ts` — same thin-route pattern as everything else.
+- New UI: `/projects/:projectId/board` (kanban, `components/kanban/*`),
+  `/projects/:projectId/settings` (statuses/WIP limits/labels management), plus
+  `IssueHistory.tsx`, `SubtaskList.tsx`, `LabelPicker.tsx`/`LabelManager.tsx` wired
+  into `IssueDetailClient.tsx`.
+- `CONTEXT.md` (new, repo root) — a domain-glossary doc (kanban/issues/comments/AI
+  terminology), no code impact.
+- Verified after merge: `npx tsc --noEmit` clean, `npx eslint .` clean (0/0), `npm
+  run build` succeeds (all 50+ routes compiled). My Day 5 notification hooks in
+  `issue.service.ts` (create + reassign) and the Sidebar's `NotificationBell`
+  integration confirmed intact and untouched by the drop.
+- The merge itself (`git add`/`git commit`) is Eric's to run per the git-authority
+  rule below — Claude only resolved the conflicted file's contents.
+
 ## Task division (current)
 
 - **Dev A** (Eric, branch `dev/Eric`): Auth (FR-001..007), Teams (FR-010..019),
@@ -421,8 +646,15 @@ developer runs commit/push/merge themselves.
   remotes: `origin` = the fork (push here), `upstream` = the original repo (read-only
   reference / eventual PR target). Vercel still not connected — now unblocked by the
   fork, just not done yet.
-- Known lint errors in Dev B's `ProjectsPageClient.tsx` / `ProjectDashboard.tsx` — see
-  Day 2 section. Doesn't block `npm run build`.
+- **Resolved 2026-07-06**: the `react-hooks/set-state-in-effect` lint errors flagged
+  in the Day 2 section were fixed by Dev B — `npx eslint .` is 0 errors/0 warnings
+  as of Day 5.
+- **FR-090 due-soon/due-today notifications aren't on a real schedule yet** —
+  `POST /api/notifications/check-due-dates` (see Day 5 section) needs an external
+  cron to call it daily. Vercel Cron is the natural fit but needs the app deployed
+  first, which is blocked on the same "Vercel not connected yet" item above. Until
+  then, trigger it manually (with the `CRON_SECRET` header) if due-date notifications
+  need to be demonstrated.
 
 ## Git commit conventions
 Never add a Co-Authored-By: Claude trailer or "Generated with Claude Code" line to commit messages.

@@ -12,3 +12,18 @@ export const updateTeamSchema = z.object({
 });
 
 export type UpdateTeamInput = z.infer<typeof updateTeamSchema>;
+
+// FR-018
+export const changeRoleSchema = z.object({
+  role: z.enum(["OWNER", "ADMIN", "MEMBER"]),
+});
+
+export type ChangeRoleInput = z.infer<typeof changeRoleSchema>;
+
+// FR-013
+export const createInviteSchema = z.object({
+  email: z.email().max(255),
+  role: z.enum(["ADMIN", "MEMBER"]).default("MEMBER"),
+});
+
+export type CreateInviteInput = z.infer<typeof createInviteSchema>;

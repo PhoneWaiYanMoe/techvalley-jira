@@ -30,6 +30,38 @@ export type TeamMemberResponse = {
   joinedAt: string;
 };
 
+export type InviteResponse = {
+  id: string;
+  teamId: string;
+  teamName?: string;
+  email: string;
+  role: TeamRole;
+  status: "PENDING" | "ACCEPTED";
+  expiresAt: string;
+  createdAt: string;
+};
+
+// --- Notifications (FR-090, FR-091) ---
+
+export type NotificationType =
+  | "ISSUE_ASSIGNED"
+  | "ISSUE_COMMENT"
+  | "DUE_SOON"
+  | "DUE_TODAY"
+  | "TEAM_INVITE"
+  | "ROLE_CHANGED";
+
+export type NotificationResponse = {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string | null;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  isRead: boolean;
+  createdAt: string;
+};
+
 // --- Projects (FR-020..027) ---
 
 export type ProjectResponse = {
@@ -154,6 +186,56 @@ export type IssueHistoryEntry = {
 export type IssueHistoryResponse = {
   data: IssueHistoryEntry[];
   nextCursor: string | null;
+};
+
+// --- Personal dashboard & team statistics (FR-081, FR-082) ---
+
+export type PersonalDashboardIssue = DashboardIssue & {
+  projectId: string;
+  projectName: string;
+};
+
+export type PersonalDashboardResponse = {
+  totalAssigned: number;
+  issuesByStatus: { status: string; count: number; issues: PersonalDashboardIssue[] }[];
+  dueTodayIssues: PersonalDashboardIssue[];
+  dueSoonIssues: PersonalDashboardIssue[];
+  recentComments: {
+    id: string;
+    issueId: string;
+    issueTitle: string;
+    projectId: string;
+    content: string;
+    createdAt: string;
+  }[];
+  teams: TeamResponse[];
+  projects: ProjectResponse[];
+};
+
+export type StatsPeriod = 7 | 30 | 90;
+
+export type StatsTrendPoint = { date: string; count: number };
+
+export type MemberStatCount = {
+  userId: string;
+  name: string;
+  initials: string;
+  count: number;
+};
+
+export type ProjectStatusBreakdown = {
+  projectId: string;
+  projectName: string;
+  statuses: { name: string; count: number; color: string | null }[];
+};
+
+export type TeamStatsResponse = {
+  period: StatsPeriod;
+  creationTrend: StatsTrendPoint[];
+  completionTrend: StatsTrendPoint[];
+  assignedPerMember: MemberStatCount[];
+  completedPerMember: MemberStatCount[];
+  statusPerProject: ProjectStatusBreakdown[];
 };
 
 export type ProjectDashboardResponse = {

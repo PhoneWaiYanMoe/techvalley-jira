@@ -1,6 +1,12 @@
-import { redirect } from "next/navigation";
+import type { Metadata } from "next";
+import { PersonalDashboardClient } from "@/components/dashboard/PersonalDashboardClient";
 
-// Redirect /dashboard → /projects (the new home for the workspace)
+export const metadata: Metadata = {
+  title: "Dashboard — TechValley Jira Lite",
+};
+
+// Personal dashboard (FR-081) — my issues by status, due soon/today,
+// recent comments, my teams/projects.
 export default function DashboardPage() {
-  redirect("/projects");
+  return <PersonalDashboardClient />;
 }

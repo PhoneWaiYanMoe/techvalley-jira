@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ApiError } from "@/lib/utils/errors";
 import { requireTeamMembership } from "@/lib/team/team.service";
 import { isOwnerOrAdmin } from "@/lib/permissions/team-role";
+import { createNotification } from "@/lib/notification/notification.service";
 import type {
   BoardCard,
   BoardResponse,
@@ -199,6 +200,18 @@ export async function createIssue(
   // FR-038: link any selected labels (validated against the project).
   if (input.labelIds && input.labelIds.length > 0) {
     await syncIssueLabels(created.id, projectId, input.labelIds);
+  }
+
+  // FR-090: notify the assignee, if one was set on creation.
+  if (created.assignee_id) {
+    await createNotification(
+      created.assignee_id,
+      "ISSUE_ASSIGNED",
+      `You were assigned to "${created.title}"`,
+      undefined,
+      "issue",
+      created.id,
+    );
   }
 
   return toIssueResponse(created as unknown as IssueRow, await getProfileMap([created.assignee_id]));
@@ -497,6 +510,22 @@ export async function updateIssue(
   if (history.length > 0) {
     await admin.from("issue_history").insert(
       history.map((h) => ({ ...h, issue_id: issueId, changed_by: userId })),
+    );
+  }
+
+  // FR-090: notify the new assignee on reassignment (not on unassignment).
+  if (
+    input.assigneeUserId !== undefined &&
+    input.assigneeUserId !== null &&
+    input.assigneeUserId !== issue.assignee_id
+  ) {
+    await createNotification(
+      input.assigneeUserId,
+      "ISSUE_ASSIGNED",
+      `You were assigned to "${updated.title}"`,
+      undefined,
+      "issue",
+      issueId,
     );
   }
 
