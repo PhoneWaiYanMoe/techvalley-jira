@@ -188,6 +188,56 @@ export type IssueHistoryResponse = {
   nextCursor: string | null;
 };
 
+// --- Personal dashboard & team statistics (FR-081, FR-082) ---
+
+export type PersonalDashboardIssue = DashboardIssue & {
+  projectId: string;
+  projectName: string;
+};
+
+export type PersonalDashboardResponse = {
+  totalAssigned: number;
+  issuesByStatus: { status: string; count: number; issues: PersonalDashboardIssue[] }[];
+  dueTodayIssues: PersonalDashboardIssue[];
+  dueSoonIssues: PersonalDashboardIssue[];
+  recentComments: {
+    id: string;
+    issueId: string;
+    issueTitle: string;
+    projectId: string;
+    content: string;
+    createdAt: string;
+  }[];
+  teams: TeamResponse[];
+  projects: ProjectResponse[];
+};
+
+export type StatsPeriod = 7 | 30 | 90;
+
+export type StatsTrendPoint = { date: string; count: number };
+
+export type MemberStatCount = {
+  userId: string;
+  name: string;
+  initials: string;
+  count: number;
+};
+
+export type ProjectStatusBreakdown = {
+  projectId: string;
+  projectName: string;
+  statuses: { name: string; count: number; color: string | null }[];
+};
+
+export type TeamStatsResponse = {
+  period: StatsPeriod;
+  creationTrend: StatsTrendPoint[];
+  completionTrend: StatsTrendPoint[];
+  assignedPerMember: MemberStatCount[];
+  completedPerMember: MemberStatCount[];
+  statusPerProject: ProjectStatusBreakdown[];
+};
+
 export type ProjectDashboardResponse = {
   project: ProjectResponse;
   kpis: {
