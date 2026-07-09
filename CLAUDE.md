@@ -486,6 +486,99 @@ Full write-up in `docs/session-log-2026-07-06.md`. Summary:
   labels yet (FR-038, Day 4), subtasks/comments/AI are placeholder cards, no kanban
   board yet (Day 3 is next for Dev B).
 
+## Day 6 — Dashboards (done)
+
+FR-081 (personal dashboard), FR-082 (team statistics with 7/30/90-day period
+selector).
+
+- `src/lib/dashboard/dashboard.service.ts` — new service, `getPersonalDashboard()`
+  and `getTeamStats()`. Didn't extend `team.service.ts` or `project.service.ts` for
+  this — `api.md` already groups FR-081/082 under their own "Dashboards" section
+  distinct from Teams/Projects, and the personal dashboard in particular spans
+  teams + projects + issues + comments, so a dedicated file fit the existing
+  "one service file per resource" rule better than bolting it onto an unrelated one.
+- **Personal dashboard (FR-081)** — `GET /api/dashboard/personal`. Assigned issues
+  are scoped to non-archived projects only (same convention as the FR-090
+  due-date-check cron: archived-project work is read-only, so it doesn't belong in
+  an actionable "my work" view). Due-today/due-soon exclude `Done`-status issues,
+  also matching that cron's logic. **Recent comments**: the `comments` table exists
+  in `schema.sql` but has no service/API layer yet — that's Dev B's Day 5 scope,
+  not landed as of this writing (confirmed via search, no `comment*` files anywhere
+  under `src/`). Read the table directly with the admin client rather than block
+  on that service existing; revisit once Dev B's comments feature lands (probably
+  fine to leave as-is, just re-verify the query still matches the eventual schema).
+- **Team statistics (FR-082)** — `GET /api/teams/:teamId/stats?period=7|30|90`, any
+  team member can view (matches other team-scoped GETs). Query param validated with
+  a plain `parsePeriod()` function (invalid/missing → defaults to 30), not zod —
+  matches the existing convention in the issues list route for filter params.
+  Semantics settled on:
+  - `creationTrend`/`completionTrend`: period-scoped daily counts, zero-filled for
+    every day in range (better for a line chart than sparse points). Completion is
+    derived from `issue_history` (`field_name='status' AND new_value='Done'`) since
+    `issues` has no `completed_at` column.
+  - `assignedPerMember`: **not** period-scoped — a live snapshot of current open
+    (non-Done) workload, matching FR-080's `workloadByAssignee` framing.
+  - `completedPerMember`: period-scoped, attributed to the issue's **current
+    assignee** (not whoever clicked the status dropdown) — kept consistent with
+    `assignedPerMember`'s assignee-centric framing rather than a "who did the
+    click" audit.
+  - `statusPerProject`: live snapshot, one row per team project (even with 0
+    issues), status colors fall back to the same `Backlog/In Progress/In
+    Review/Done` palette used in `project.service.ts` when a default status's
+    `color` column is null (it's seeded null in `schema.sql`).
+- UI: `/dashboard` is no longer a redirect to `/projects` — it's now the real
+  personal dashboard (`PersonalDashboardClient.tsx`), reusing Dev B's
+  `StatusDonut`/`BarChart` components rather than rebuilding them. New "Statistics"
+  tab added to the team layout's tab bar (`/teams/:teamId/statistics`,
+  `TeamStatsClient.tsx`) with a period-selector pill control, two `LineChart`
+  trend graphs (new small SVG component, no chart library — matches the existing
+  `StatusDonut`/`BarChart` house style of hand-rolled CSS/SVG over a dependency),
+  and reused `BarChart` for the per-member breakdowns.
+- E2E-tested via scratch Playwright (31/31 passed): personal dashboard's assigned
+  count/status grouping/due-today/due-soon/recent-comments/teams/projects all
+  verified against seeded data with direct DB assertions; team stats' creation and
+  completion trend totals, assigned/completed-per-member attribution, and
+  status-per-project breakdown all verified for both `period=7` and `period=90`;
+  UI screenshots confirmed both pages render correctly end-to-end including the
+  period-selector click-through.
+- **Dev-server gotcha hit during testing**: added `src/app/api/teams/[teamId]/stats/route.ts`
+  while a `next dev` (Turbopack) instance was already running — it 404'd on an
+  unrelated sibling route (`POST /api/teams/:teamId/projects`) with Next's own
+  not-found HTML page (not our JSON error envelope) until the dev server was
+  restarted with a cleared `.next` cache. If a route that definitely exists on disk
+  404s with an HTML body instead of a JSON error, suspect a stale Turbopack route
+  manifest before assuming a real bug — restart `next dev` first.
+
+## Dev B — Kanban, labels, subtasks, issue history, settings (pulled 2026-07-09)
+
+Large drop covering FR-036 (search/filter/sort), FR-038 (labels), FR-039 (issue
+history), FR-039-2 (subtasks), FR-050..054 (kanban board incl. custom statuses/WIP
+limits/drag-drop), and a project settings page. One merge conflict, resolved:
+
+- **Conflict**: `src/lib/issue/issue.service.ts`'s `createIssue()` — my Day 5
+  `ISSUE_ASSIGNED` notification hook (HEAD) vs. Dev B's Day 3 FR-038 label-linking
+  (`syncIssueLabels`) touched the same post-insert block. Not mutually exclusive;
+  resolved by keeping both (labels linked first, then the assignee notification
+  fires) — no logic lost on either side.
+- New dependency `@hello-pangea/dnd` (drag-and-drop for the kanban board) — required
+  `npm install` after the pull, since the lockfile alone doesn't add it to
+  `node_modules`. If a fresh pull ever fails to compile with `Cannot find module
+  '@hello-pangea/dnd'`, this is why — run `npm install` first.
+- New service files: `src/lib/label/label.service.ts`, `src/lib/status/status.service.ts`,
+  `src/lib/subtask/subtask.service.ts` — same thin-route pattern as everything else.
+- New UI: `/projects/:projectId/board` (kanban, `components/kanban/*`),
+  `/projects/:projectId/settings` (statuses/WIP limits/labels management), plus
+  `IssueHistory.tsx`, `SubtaskList.tsx`, `LabelPicker.tsx`/`LabelManager.tsx` wired
+  into `IssueDetailClient.tsx`.
+- `CONTEXT.md` (new, repo root) — a domain-glossary doc (kanban/issues/comments/AI
+  terminology), no code impact.
+- Verified after merge: `npx tsc --noEmit` clean, `npx eslint .` clean (0/0), `npm
+  run build` succeeds (all 50+ routes compiled). My Day 5 notification hooks in
+  `issue.service.ts` (create + reassign) and the Sidebar's `NotificationBell`
+  integration confirmed intact and untouched by the drop.
+- The merge itself (`git add`/`git commit`) is Eric's to run per the git-authority
+  rule below — Claude only resolved the conflicted file's contents.
+
 ## Task division (current)
 
 - **Dev A** (Eric, branch `dev/Eric`): Auth (FR-001..007), Teams (FR-010..019),

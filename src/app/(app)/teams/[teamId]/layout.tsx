@@ -37,6 +37,7 @@ export default async function TeamLayout({
     { key: "overview", label: "Overview", href: `/teams/${teamId}` },
     { key: "members", label: "Members", href: `/teams/${teamId}/members` },
     { key: "activity", label: "Activity", href: `/teams/${teamId}/activity` },
+    { key: "statistics", label: "Statistics", href: `/teams/${teamId}/statistics` },
     ...(canManage ? [{ key: "settings", label: "Settings", href: `/teams/${teamId}/settings` }] : []),
   ];
 
