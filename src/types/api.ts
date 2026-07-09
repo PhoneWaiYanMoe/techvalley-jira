@@ -140,6 +140,24 @@ export type SubtaskResponse = {
   position: number;
 };
 
+// --- Comments (FR-060..063) ---
+
+export type CommentResponse = {
+  id: string;
+  content: string;
+  author: { id: string; name: string; initials: string; profileImage: string | null };
+  createdAt: string;
+  updatedAt: string;
+  edited: boolean; // updatedAt meaningfully later than createdAt
+  canEdit: boolean; // author only (FR-062)
+  canDelete: boolean; // author, issue owner, project owner, team OWNER/ADMIN (FR-063)
+};
+
+export type CommentListResponse = {
+  data: CommentResponse[];
+  nextCursor: string | null;
+};
+
 export type IssueDetailResponse = IssueResponse & {
   description: string | null;
   creator: { id: string; name: string };
