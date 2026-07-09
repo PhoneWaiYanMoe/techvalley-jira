@@ -73,6 +73,12 @@ export type IssueStatusOption = {
   wipLimit: number | null;
 };
 
+export type LabelResponse = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type IssueResponse = {
   id: string;
   projectId: string;
@@ -85,10 +91,21 @@ export type IssueResponse = {
   assignee: { id: string; name: string; initials: string } | null;
 };
 
+export type IssueListItem = IssueResponse & {
+  labels: LabelResponse[];
+};
+
 export type IssueListResponse = {
-  data: IssueResponse[];
+  data: IssueListItem[];
   nextCursor: string | null;
   total: number;
+};
+
+export type SubtaskResponse = {
+  id: string;
+  title: string;
+  isCompleted: boolean;
+  position: number;
 };
 
 export type IssueDetailResponse = IssueResponse & {
@@ -98,9 +115,45 @@ export type IssueDetailResponse = IssueResponse & {
   projectName: string;
   projectArchived: boolean;
   canDelete: boolean;
-  subtasks: { id: string; title: string; isCompleted: boolean; position: number }[];
-  labels: { id: string; name: string; color: string }[];
+  subtasks: SubtaskResponse[];
+  labels: LabelResponse[];
   commentCount: number;
+};
+
+// --- Kanban board (FR-050..054) ---
+
+export type BoardCard = {
+  id: string;
+  title: string;
+  statusId: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+  position: number;
+  dueDate: string | null;
+  createdAt: string;
+  assignee: { id: string; name: string; initials: string } | null;
+  labels: { id: string; name: string; color: string }[];
+  subtaskProgress: { done: number; total: number };
+};
+
+export type BoardResponse = {
+  statuses: IssueStatusOption[];
+  issues: BoardCard[];
+};
+
+// --- Issue change history (FR-039) ---
+
+export type IssueHistoryEntry = {
+  id: string;
+  field: string; // status | assignee | priority | title | due_date
+  oldValue: string | null;
+  newValue: string | null;
+  changedBy: string;
+  changedAt: string;
+};
+
+export type IssueHistoryResponse = {
+  data: IssueHistoryEntry[];
+  nextCursor: string | null;
 };
 
 export type ProjectDashboardResponse = {

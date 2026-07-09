@@ -3,13 +3,20 @@ import { ApiError } from "@/lib/utils/errors";
 import { requireTeamMembership } from "@/lib/team/team.service";
 import { isOwnerOrAdmin } from "@/lib/permissions/team-role";
 import type {
+  BoardCard,
+  BoardResponse,
   IssueDetailResponse,
+  IssueHistoryResponse,
   IssueListResponse,
   IssueResponse,
   IssueStatusOption,
   TeamRole,
 } from "@/types/api";
-import type { CreateIssueInput, UpdateIssueInput } from "@/validation/issue.schema";
+import type {
+  CreateIssueInput,
+  MoveIssueInput,
+  UpdateIssueInput,
+} from "@/validation/issue.schema";
 
 const ISSUE_LIMIT_PER_PROJECT = 200;
 const DEFAULT_PAGE_SIZE = 20;
@@ -22,7 +29,7 @@ const STATUS_COLORS: Record<string, string> = {
   Done: "#10b981",
 };
 
-function statusColor(name: string, color: string | null): string {
+export function statusColor(name: string, color: string | null): string {
   return color ?? STATUS_COLORS[name] ?? "#94a3b8";
 }
 
@@ -56,9 +63,9 @@ const ISSUE_SELECT =
 
 // --- Access guards (FR-070: non-members get 404, never 403) ---
 
-type ProjectRow = { id: string; team_id: string; owner_id: string; name: string; is_archived: boolean };
+export type ProjectRow = { id: string; team_id: string; owner_id: string; name: string; is_archived: boolean };
 
-async function requireProjectAccess(
+export async function requireProjectAccess(
   projectId: string,
   userId: string,
 ): Promise<{ project: ProjectRow; role: TeamRole }> {
@@ -79,7 +86,7 @@ async function requireProjectAccess(
   return { project, role };
 }
 
-async function requireIssueAccess(
+export async function requireIssueAccess(
   issueId: string,
   userId: string,
 ): Promise<{ issue: IssueRow; project: ProjectRow; role: TeamRole }> {
@@ -116,35 +123,6 @@ async function requireAssigneeInTeam(assigneeUserId: string, teamId: string): Pr
   if (!data) {
     throw new ApiError(422, "INVALID_ASSIGNEE", "Assignee must be a member of the project's team");
   }
-}
-
-// --- Statuses (FR-033; CRUD arrives with FR-053) ---
-
-export async function listStatuses(
-  projectId: string,
-  userId: string,
-): Promise<IssueStatusOption[]> {
-  const admin = createAdminClient();
-  await requireProjectAccess(projectId, userId);
-
-  const { data, error } = await admin
-    .from("issue_statuses")
-    .select("id, name, color, position, is_default, wip_limit")
-    .eq("project_id", projectId)
-    .order("position", { ascending: true });
-
-  if (error) {
-    throw new ApiError(500, "DB_ERROR", "Failed to fetch statuses");
-  }
-
-  return (data ?? []).map((s) => ({
-    id: s.id,
-    name: s.name,
-    color: statusColor(s.name, s.color),
-    position: s.position,
-    isDefault: s.is_default,
-    wipLimit: s.wip_limit,
-  }));
 }
 
 // --- Create issue (FR-030) ---
@@ -218,70 +196,120 @@ export async function createIssue(
     throw new ApiError(500, "DB_ERROR", "Failed to create issue");
   }
 
+  // FR-038: link any selected labels (validated against the project).
+  if (input.labelIds && input.labelIds.length > 0) {
+    await syncIssueLabels(created.id, projectId, input.labelIds);
+  }
+
   return toIssueResponse(created as unknown as IssueRow, await getProfileMap([created.assignee_id]));
 }
 
-// --- List issues (basic version; FR-036 filters/sort arrive Day 4) ---
+// --- List issues with search / filter / sort (FR-036) ---
+
+export type ListIssuesFilters = {
+  cursor?: string | null; // offset-based cursor (stringified offset)
+  limit?: number;
+  status?: string; // statusId
+  assignee?: string; // userId, or "unassigned"
+  priority?: "HIGH" | "MEDIUM" | "LOW";
+  label?: string; // labelId
+  hasDueDate?: boolean;
+  dueFrom?: string;
+  dueTo?: string;
+  search?: string; // title contains
+  sort?: "created" | "due" | "priority" | "updated";
+};
+
+const PRIORITY_RANK: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
 export async function listIssues(
   projectId: string,
   userId: string,
-  opts: { cursor?: string | null; limit?: number },
+  opts: ListIssuesFilters,
 ): Promise<IssueListResponse> {
   const admin = createAdminClient();
   await requireProjectAccess(projectId, userId);
 
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_PAGE_SIZE, 1), 50);
+  const offset = Math.max(Number(opts.cursor ?? 0) || 0, 0);
 
-  const { count, error: countErr } = await admin
-    .from("issues")
-    .select("id", { count: "exact", head: true })
-    .eq("project_id", projectId)
-    .is("deleted_at", null);
-
-  if (countErr) {
-    throw new ApiError(500, "DB_ERROR", "Failed to count issues");
+  // FR-038 label filter: resolve the set of issue ids carrying that label first.
+  let labelIssueIds: string[] | null = null;
+  if (opts.label) {
+    const { data: links } = await admin
+      .from("issue_labels")
+      .select("issue_id")
+      .eq("label_id", opts.label);
+    labelIssueIds = (links ?? []).map((l) => l.issue_id);
+    if (labelIssueIds.length === 0) {
+      return { data: [], nextCursor: null, total: 0 };
+    }
   }
 
+  // A project caps at 200 issues, so fetch all matches and sort/paginate in
+  // memory — this keeps priority ordering and arbitrary sort keys simple.
   let query = admin
     .from("issues")
     .select(ISSUE_SELECT)
     .eq("project_id", projectId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .limit(limit + 1);
+    .is("deleted_at", null);
 
-  if (opts.cursor) {
-    // Keyset pagination: cursor is the last issue id of the previous page
-    const { data: cursorRow } = await admin
-      .from("issues")
-      .select("created_at, id")
-      .eq("id", opts.cursor)
-      .single();
+  if (opts.status) query = query.eq("status_id", opts.status);
+  if (opts.priority) query = query.eq("priority", opts.priority);
+  if (opts.assignee === "unassigned") query = query.is("assignee_id", null);
+  else if (opts.assignee) query = query.eq("assignee_id", opts.assignee);
+  if (opts.hasDueDate) query = query.not("due_date", "is", null);
+  if (opts.dueFrom) query = query.gte("due_date", opts.dueFrom);
+  if (opts.dueTo) query = query.lte("due_date", opts.dueTo);
+  if (opts.search) query = query.ilike("title", `%${opts.search}%`);
+  if (labelIssueIds) query = query.in("id", labelIssueIds);
 
-    if (cursorRow) {
-      query = query.or(
-        `created_at.lt.${cursorRow.created_at},and(created_at.eq.${cursorRow.created_at},id.lt.${cursorRow.id})`,
-      );
-    }
-  }
-
-  const { data: rows, error } = await query;
-
+  const { data: rowsData, error } = await query.limit(ISSUE_LIMIT_PER_PROJECT);
   if (error) {
     throw new ApiError(500, "DB_ERROR", "Failed to fetch issues");
   }
 
-  const page = (rows ?? []).slice(0, limit) as unknown as IssueRow[];
-  const hasMore = (rows ?? []).length > limit;
+  const rows = (rowsData ?? []) as unknown as IssueRow[];
 
-  const profileMap = await getProfileMap(page.map((r) => r.assignee_id));
+  const sort = opts.sort ?? "created";
+  rows.sort((a, b) => {
+    switch (sort) {
+      case "due": {
+        // Nulls last, then earliest due first.
+        if (a.due_date === b.due_date) return b.created_at.localeCompare(a.created_at);
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return a.due_date.localeCompare(b.due_date);
+      }
+      case "priority":
+        if (PRIORITY_RANK[a.priority] !== PRIORITY_RANK[b.priority]) {
+          return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+        }
+        return b.created_at.localeCompare(a.created_at);
+      case "updated":
+        return b.updated_at.localeCompare(a.updated_at);
+      case "created":
+      default:
+        return b.created_at.localeCompare(a.created_at);
+    }
+  });
+
+  const total = rows.length;
+  const page = rows.slice(offset, offset + limit);
+  const hasMore = offset + limit < total;
+
+  const [profileMap, labelMap] = await Promise.all([
+    getProfileMap(page.map((r) => r.assignee_id)),
+    getIssueLabelMap(page.map((r) => r.id)),
+  ]);
 
   return {
-    data: page.map((r) => toIssueResponse(r, profileMap)),
-    nextCursor: hasMore ? page[page.length - 1].id : null,
-    total: count ?? 0,
+    data: page.map((r) => ({
+      ...toIssueResponse(r, profileMap),
+      labels: labelMap.get(r.id) ?? [],
+    })),
+    nextCursor: hasMore ? String(offset + limit) : null,
+    total,
   };
 }
 
@@ -296,7 +324,7 @@ export async function getIssueDetail(
 
   const profileMap = await getProfileMap([issue.assignee_id, issue.creator_id]);
 
-  const [{ count: commentCount }, { data: subtasks }] = await Promise.all([
+  const [{ count: commentCount }, { data: subtasks }, labelMap] = await Promise.all([
     admin
       .from("comments")
       .select("id", { count: "exact", head: true })
@@ -307,6 +335,7 @@ export async function getIssueDetail(
       .select("id, title, is_completed, position")
       .eq("issue_id", issueId)
       .order("position", { ascending: true }),
+    getIssueLabelMap([issueId]),
   ]);
 
   const creator = profileMap.get(issue.creator_id);
@@ -325,9 +354,47 @@ export async function getIssueDetail(
       isCompleted: s.is_completed,
       position: s.position,
     })),
-    labels: [], // FR-038 (Day 4)
+    labels: labelMap.get(issueId) ?? [],
     commentCount: commentCount ?? 0,
   };
+}
+
+// FR-038: validate labelIds belong to the project, then replace the issue's set.
+async function syncIssueLabels(
+  issueId: string,
+  projectId: string,
+  labelIds: string[],
+): Promise<void> {
+  const admin = createAdminClient();
+
+  if (labelIds.length > 0) {
+    const unique = [...new Set(labelIds)];
+    const { data: valid, error } = await admin
+      .from("labels")
+      .select("id")
+      .eq("project_id", projectId)
+      .in("id", unique);
+
+    if (error) {
+      throw new ApiError(500, "DB_ERROR", "Failed to validate labels");
+    }
+    if ((valid?.length ?? 0) !== unique.length) {
+      throw new ApiError(422, "INVALID_LABEL", "One or more labels do not belong to this project");
+    }
+  }
+
+  const { error: delErr } = await admin.from("issue_labels").delete().eq("issue_id", issueId);
+  if (delErr) {
+    throw new ApiError(500, "DB_ERROR", "Failed to update labels");
+  }
+
+  if (labelIds.length > 0) {
+    const rows = [...new Set(labelIds)].map((label_id) => ({ issue_id: issueId, label_id }));
+    const { error: insErr } = await admin.from("issue_labels").insert(rows);
+    if (insErr) {
+      throw new ApiError(500, "DB_ERROR", "Failed to update labels");
+    }
+  }
 }
 
 // --- Update issue (FR-032; any team member) ---
@@ -406,6 +473,11 @@ export async function updateIssue(
     });
   }
 
+  // FR-038: replace-set the issue's labels when labelIds is provided.
+  if (input.labelIds !== undefined) {
+    await syncIssueLabels(issueId, issue.project_id, input.labelIds);
+  }
+
   if (Object.keys(update).length === 0) {
     return toIssueResponse(issue, await getProfileMap([issue.assignee_id]));
   }
@@ -452,6 +524,248 @@ export async function deleteIssue(issueId: string, userId: string): Promise<void
   if (error) {
     throw new ApiError(500, "DB_ERROR", "Failed to delete issue");
   }
+}
+
+// --- Move issue (FR-051 cross-column, FR-052 reorder within column) ---
+
+export async function moveIssue(
+  issueId: string,
+  userId: string,
+  input: MoveIssueInput,
+): Promise<void> {
+  const admin = createAdminClient();
+  const { issue, project } = await requireIssueAccess(issueId, userId);
+
+  if (project.is_archived) {
+    throw new ApiError(422, "PROJECT_ARCHIVED", "This project is archived and read-only");
+  }
+
+  // FR-033: status must belong to this project
+  const { data: status, error: statusErr } = await admin
+    .from("issue_statuses")
+    .select("id, name")
+    .eq("id", input.statusId)
+    .eq("project_id", issue.project_id)
+    .maybeSingle();
+
+  if (statusErr) {
+    throw new ApiError(500, "DB_ERROR", "Failed to check status");
+  }
+  if (!status) {
+    throw new ApiError(422, "INVALID_STATUS", "Status does not belong to this project");
+  }
+
+  const { error: updateErr } = await admin
+    .from("issues")
+    .update({ status_id: input.statusId, position: input.position })
+    .eq("id", issueId);
+
+  if (updateErr) {
+    throw new ApiError(500, "DB_ERROR", "Failed to move issue");
+  }
+
+  // FR-039: a cross-column move is a status change; a within-column reorder is not.
+  if (input.statusId !== issue.status_id) {
+    await admin.from("issue_history").insert({
+      issue_id: issueId,
+      field_name: "status",
+      old_value: issue.issue_statuses.name,
+      new_value: status.name,
+      changed_by: userId,
+    });
+  }
+}
+
+// --- Issue change history (FR-039) ---
+
+export async function getIssueHistory(
+  issueId: string,
+  userId: string,
+  opts: { cursor?: string | null; limit?: number },
+): Promise<IssueHistoryResponse> {
+  const admin = createAdminClient();
+  await requireIssueAccess(issueId, userId);
+
+  const limit = Math.min(Math.max(opts.limit ?? DEFAULT_PAGE_SIZE, 1), 50);
+
+  let query = admin
+    .from("issue_history")
+    .select("id, changed_by, field_name, old_value, new_value, created_at")
+    .eq("issue_id", issueId)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+
+  if (opts.cursor) {
+    const { data: cursorRow } = await admin
+      .from("issue_history")
+      .select("created_at, id")
+      .eq("id", opts.cursor)
+      .single();
+    if (cursorRow) {
+      query = query.or(
+        `created_at.lt.${cursorRow.created_at},and(created_at.eq.${cursorRow.created_at},id.lt.${cursorRow.id})`,
+      );
+    }
+  }
+
+  const { data: rows, error } = await query;
+  if (error) {
+    throw new ApiError(500, "DB_ERROR", "Failed to fetch history");
+  }
+
+  type HistoryRow = {
+    id: string;
+    changed_by: string | null;
+    field_name: string;
+    old_value: string | null;
+    new_value: string | null;
+    created_at: string;
+  };
+
+  const all = (rows ?? []) as HistoryRow[];
+  const page = all.slice(0, limit);
+  const hasMore = all.length > limit;
+
+  const profileMap = await getProfileMap(page.map((r) => r.changed_by));
+
+  return {
+    data: page.map((r) => ({
+      id: r.id,
+      field: r.field_name,
+      oldValue: r.old_value,
+      newValue: r.new_value,
+      changedBy: r.changed_by ? (profileMap.get(r.changed_by)?.name ?? "Unknown") : "Unknown",
+      changedAt: r.created_at,
+    })),
+    nextCursor: hasMore ? page[page.length - 1].id : null,
+  };
+}
+
+// --- Kanban board (FR-050): statuses + all cards in one payload ---
+
+export async function getBoard(projectId: string, userId: string): Promise<BoardResponse> {
+  const admin = createAdminClient();
+  await requireProjectAccess(projectId, userId);
+
+  // Statuses are fetched inline (not via status.service) to avoid an import cycle.
+  const { data: statusRows, error: statusErr } = await admin
+    .from("issue_statuses")
+    .select("id, name, color, position, is_default, wip_limit")
+    .eq("project_id", projectId)
+    .order("position", { ascending: true });
+
+  if (statusErr) {
+    throw new ApiError(500, "DB_ERROR", "Failed to fetch statuses");
+  }
+
+  const statuses: IssueStatusOption[] = (statusRows ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    color: statusColor(s.name, s.color),
+    position: s.position,
+    isDefault: s.is_default,
+    wipLimit: s.wip_limit,
+  }));
+
+  const { data: issueRows, error: issueErr } = await admin
+    .from("issues")
+    .select(
+      "id, title, status_id, priority, assignee_id, due_date, position, created_at",
+    )
+    .eq("project_id", projectId)
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
+    .limit(ISSUE_LIMIT_PER_PROJECT);
+
+  if (issueErr) {
+    throw new ApiError(500, "DB_ERROR", "Failed to fetch board issues");
+  }
+
+  const rows = issueRows ?? [];
+  const issueIds = rows.map((r) => r.id);
+  const profileMap = await getProfileMap(rows.map((r) => r.assignee_id));
+
+  // Subtask progress + labels per card (labels stay empty until FR-038 populates them).
+  const [subtaskMap, labelMap] = await Promise.all([
+    getSubtaskProgressMap(issueIds),
+    getIssueLabelMap(issueIds),
+  ]);
+
+  const cards: BoardCard[] = rows.map((r) => {
+    const assignee = r.assignee_id ? profileMap.get(r.assignee_id) : null;
+    return {
+      id: r.id,
+      title: r.title,
+      statusId: r.status_id,
+      priority: r.priority,
+      position: Number(r.position),
+      dueDate: r.due_date,
+      createdAt: r.created_at,
+      assignee:
+        r.assignee_id && assignee
+          ? { id: r.assignee_id, name: assignee.name, initials: assignee.initials }
+          : null,
+      labels: labelMap.get(r.id) ?? [],
+      subtaskProgress: subtaskMap.get(r.id) ?? { done: 0, total: 0 },
+    };
+  });
+
+  return { statuses, issues: cards };
+}
+
+async function getSubtaskProgressMap(
+  issueIds: string[],
+): Promise<Map<string, { done: number; total: number }>> {
+  const map = new Map<string, { done: number; total: number }>();
+  if (issueIds.length === 0) return map;
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("subtasks")
+    .select("issue_id, is_completed")
+    .in("issue_id", issueIds);
+
+  (data ?? []).forEach((s: { issue_id: string; is_completed: boolean }) => {
+    const prog = map.get(s.issue_id) ?? { done: 0, total: 0 };
+    prog.total += 1;
+    if (s.is_completed) prog.done += 1;
+    map.set(s.issue_id, prog);
+  });
+
+  return map;
+}
+
+async function getIssueLabelMap(
+  issueIds: string[],
+): Promise<Map<string, { id: string; name: string; color: string }[]>> {
+  const map = new Map<string, { id: string; name: string; color: string }[]>();
+  if (issueIds.length === 0) return map;
+
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("issue_labels")
+    .select("issue_id, labels!inner(id, name, color)")
+    .in("issue_id", issueIds);
+
+  type LabelJoinRow = {
+    issue_id: string;
+    // PostgREST embeds a to-one relation as an object, but the generated types
+    // widen it to an array — normalize either shape.
+    labels:
+      | { id: string; name: string; color: string }
+      | { id: string; name: string; color: string }[];
+  };
+
+  ((data ?? []) as LabelJoinRow[]).forEach((row) => {
+    const label = Array.isArray(row.labels) ? row.labels[0] : row.labels;
+    if (!label) return;
+    const list = map.get(row.issue_id) ?? [];
+    list.push({ id: label.id, name: label.name, color: label.color });
+    map.set(row.issue_id, list);
+  });
+
+  return map;
 }
 
 // --- Helpers ---
