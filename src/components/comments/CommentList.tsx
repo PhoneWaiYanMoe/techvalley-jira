@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
-import type { CommentResponse, CommentListResponse } from "@/types/api";
+import type {
+  CommentResponse,
+  CommentListResponse,
+  AiCommentSummaryResponse,
+} from "@/types/api";
+
+const MIN_COMMENTS_FOR_SUMMARY = 5; // FR-045
 
 function when(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -31,6 +37,27 @@ export function CommentList({
   const [posting, setPosting] = useState(false);
   const [draft, setDraft] = useState("");
   const [err, setErr] = useState<string | null>(null);
+
+  // FR-045 — AI discussion summary (enabled at >=5 comments)
+  const [summary, setSummary] = useState<AiCommentSummaryResponse | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
+  const [summaryErr, setSummaryErr] = useState<string | null>(null);
+
+  async function summarize() {
+    if (summarizing) return;
+    setSummarizing(true);
+    setSummaryErr(null);
+    try {
+      const res = await fetch(`/api/issues/${issueId}/ai/comment-summary`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message ?? "Failed to summarize");
+      setSummary(data as AiCommentSummaryResponse);
+    } catch (e) {
+      setSummaryErr(e instanceof Error ? e.message : "Failed to summarize");
+    } finally {
+      setSummarizing(false);
+    }
+  }
 
   function setCountBoth(next: number) {
     setCount(next);
@@ -93,7 +120,40 @@ export function CommentList({
       <div className="mb-3 flex items-center gap-2">
         <h2 className="text-[13.5px] font-bold">Comments</h2>
         <span className="font-mono text-[11px] text-neutral-400">{count}</span>
+        {count >= MIN_COMMENTS_FOR_SUMMARY && (
+          <button
+            onClick={() => void summarize()}
+            disabled={summarizing}
+            className="ml-auto rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-semibold text-neutral-600 hover:bg-neutral-100 disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700"
+          >
+            {summarizing ? "Summarizing…" : "✦ Summarize discussion"}
+          </button>
+        )}
       </div>
+
+      {summaryErr && (
+        <p className="mb-2 text-[11.5px] font-semibold text-rose-600">{summaryErr}</p>
+      )}
+      {summary && (
+        <div className="mb-3 rounded-lg bg-neutral-50 p-3 text-[12.3px] leading-relaxed text-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200">
+          <p className="whitespace-pre-wrap">{summary.summary}</p>
+          {summary.keyDecisions.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[10.5px] font-bold uppercase tracking-wide text-neutral-400">
+                Key decisions
+              </p>
+              <ul className="mt-1 list-disc pl-4">
+                {summary.keyDecisions.map((d, i) => (
+                  <li key={i}>{d}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.cached && (
+            <span className="mt-1.5 block font-mono text-[10px] text-neutral-400">cached</span>
+          )}
+        </div>
+      )}
 
       {err && <p className="mb-2 text-[11.5px] font-semibold text-rose-600">{err}</p>}
 
