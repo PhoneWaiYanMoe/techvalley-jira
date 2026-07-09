@@ -14,6 +14,7 @@ import { PriorityDot, DueBadge } from "@/components/issues/IssueBadges";
 import { LabelPicker } from "@/components/labels/LabelPicker";
 import { SubtaskList } from "@/components/subtasks/SubtaskList";
 import { IssueHistory } from "@/components/issues/IssueHistory";
+import { CommentList } from "@/components/comments/CommentList";
 import type { SubtaskResponse } from "@/types/api";
 import type { UpdateIssueInput } from "@/validation/issue.schema";
 
@@ -292,15 +293,14 @@ export function IssueDetailClient({
             />
           </div>
 
-          {/* Comments — FR-060..063, Day 5 */}
+          {/* Comments — FR-060..063 */}
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="text-[13.5px] font-bold">
-              Comments{" "}
-              <span className="font-mono text-[11px] font-normal text-neutral-400">
-                {issue.commentCount}
-              </span>
-            </h2>
-            <p className="mt-2 text-[12.8px] text-neutral-400">Comments coming soon.</p>
+            <CommentList
+              issueId={issueId}
+              readOnly={readOnly}
+              initialCount={issue.commentCount}
+              onCountChange={(commentCount) => setIssue({ ...issue, commentCount })}
+            />
           </div>
 
           {/* Change history — FR-039 */}
