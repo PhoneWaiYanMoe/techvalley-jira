@@ -435,6 +435,12 @@ export async function updateIssue(
   if (input.description !== undefined && input.description !== issue.description) {
     update.description = input.description;
     // description changes aren't tracked in issue_history (schema: status|assignee|priority|title|due_date)
+    // FR-040/041: editing the description invalidates the AI summary/suggestion cache.
+    update.ai_summary = null;
+    update.ai_summary_generated_at = null;
+    update.ai_suggestion = null;
+    update.ai_suggestion_generated_at = null;
+    update.ai_description_hash = null;
   }
 
   if (input.priority !== undefined && input.priority !== issue.priority) {

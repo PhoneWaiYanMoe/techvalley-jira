@@ -140,6 +140,20 @@ export type SubtaskResponse = {
   position: number;
 };
 
+// --- AI features (FR-040..045) ---
+
+export type AiSummaryResponse = { summary: string; cached: boolean };
+export type AiSuggestionResponse = { suggestion: string; cached: boolean };
+export type AiAutoLabelResponse = { labelIds: string[] }; // max 3, from existing project labels
+export type AiDuplicateCheckResponse = {
+  similarIssues: { id: string; title: string; similarity: number }[]; // max 3
+};
+export type AiCommentSummaryResponse = {
+  summary: string;
+  keyDecisions: string[];
+  cached: boolean;
+};
+
 // --- Comments (FR-060..063) ---
 
 export type CommentResponse = {
