@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTeam } from "@/lib/team/team.service";
 import { TeamSettingsForm } from "@/components/team/TeamSettingsForm";
 import { DeleteTeamSection } from "@/components/team/DeleteTeamSection";
+import { getT } from "@/lib/i18n/server";
 
 export default async function TeamSettingsPage({
   params,
@@ -27,10 +28,11 @@ export default async function TeamSettingsPage({
     notFound();
   }
 
+  const t = await getT();
   return (
     <div className="flex flex-col gap-10">
       <section>
-        <h2 className="text-lg font-semibold">Team name</h2>
+        <h2 className="text-lg font-semibold">{t("teamSettings.teamName")}</h2>
         <div className="mt-4">
           <TeamSettingsForm teamId={teamId} initialName={team.name} />
         </div>

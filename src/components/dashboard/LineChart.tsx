@@ -1,6 +1,7 @@
 "use client";
 
 import type { StatsTrendPoint } from "@/types/api";
+import { useI18n } from "@/lib/i18n/client";
 
 function formatDate(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00Z`);
@@ -14,12 +15,13 @@ export function LineChart({
   points: StatsTrendPoint[];
   color: string;
 }) {
+  const { t } = useI18n();
   const total = points.reduce((sum, p) => sum + p.count, 0);
 
   if (points.length === 0 || total === 0) {
     return (
       <div className="flex h-[140px] items-center justify-center">
-        <p className="text-xs text-neutral-400">No activity in this period.</p>
+        <p className="text-xs text-neutral-400">{t("stats.noActivity")}</p>
       </div>
     );
   }

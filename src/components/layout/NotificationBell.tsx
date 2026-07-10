@@ -4,15 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { NotificationResponse } from "@/types/api";
+import { useI18n } from "@/lib/i18n/client";
+import type { TFunction } from "@/lib/i18n/translate";
 
-function timeAgo(dateStr: string): string {
+function timeAgo(t: TFunction, dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t("time.justNow");
+  if (mins < 60) return t("time.minsAgo", { n: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return t("time.hoursAgo", { n: hours });
+  return t("time.daysAgo", { n: Math.floor(hours / 24) });
 }
 
 // Issue detail lives at /projects/:projectId/issues/:issueId — the
@@ -34,6 +36,7 @@ async function entityHref(n: NotificationResponse): Promise<string | null> {
 
 export function NotificationBell() {
   const router = useRouter();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -86,7 +89,7 @@ export function NotificationBell() {
       <button
         onClick={() => setOpen((v) => !v)}
         className="relative flex h-[30px] w-[30px] items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
-        aria-label="Notifications"
+        aria-label={t("notifications.title")}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -103,14 +106,14 @@ export function NotificationBell() {
         <div className="absolute left-0 top-full z-50 mt-2 w-[320px] rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-800">
             <span className="text-xs font-bold uppercase tracking-widest text-neutral-400">
-              Notifications
+              {t("notifications.title")}
             </span>
             {unreadCount > 0 && (
               <button
                 onClick={handleMarkAllRead}
                 className="text-[11px] font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
               >
-                Mark all read
+                {t("notifications.markAllRead")}
               </button>
             )}
           </div>
@@ -118,7 +121,7 @@ export function NotificationBell() {
           <div className="max-h-[360px] overflow-y-auto">
             {notifications.length === 0 ? (
               <p className="px-4 py-6 text-center text-[12.5px] text-neutral-400">
-                No notifications yet
+                {t("notifications.empty")}
               </p>
             ) : (
               notifications.map((n) => (
@@ -138,7 +141,7 @@ export function NotificationBell() {
                     </span>
                   </span>
                   <span className="ml-3.5 font-mono text-[10.5px] text-neutral-400">
-                    {timeAgo(n.createdAt)}
+                    {timeAgo(t, n.createdAt)}
                   </span>
                 </button>
               ))
@@ -151,7 +154,7 @@ export function NotificationBell() {
               onClick={() => setOpen(false)}
               className="block text-center text-[11.5px] font-semibold text-indigo-600 hover:underline dark:text-indigo-400"
             >
-              View all
+              {t("notifications.viewAll")}
             </Link>
           </div>
         </div>

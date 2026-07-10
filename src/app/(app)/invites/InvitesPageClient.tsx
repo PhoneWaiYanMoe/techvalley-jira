@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import type { InviteResponse } from "@/types/api";
 import { RoleBadge } from "@/components/team/RoleBadge";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 export function InvitesPageClient() {
   const router = useRouter();
+  const { t } = useI18n();
   const [invites, setInvites] = useState<InviteResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function InvitesPageClient() {
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setError(body?.error?.message ?? "Failed to accept invite");
+      setError(body?.error?.message ?? t("invites.acceptFailed"));
       return;
     }
     setInvites((prev) => prev.filter((i) => i.id !== invite.id));
@@ -46,7 +48,7 @@ export function InvitesPageClient() {
   return (
     <div className="p-6 pb-10">
       <div className="mb-5 flex items-baseline gap-2.5">
-        <h1 className="text-xl font-bold tracking-tight">My invites</h1>
+        <h1 className="text-xl font-bold tracking-tight">{t("invites.title")}</h1>
         <span className="font-mono text-sm text-neutral-400">{invites.length}</span>
       </div>
 
@@ -67,11 +69,11 @@ export function InvitesPageClient() {
                 <div className="text-sm font-bold">{invite.teamName}</div>
                 <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
                   <RoleBadge role={invite.role} />
-                  <span>Expires {new Date(invite.expiresAt).toLocaleDateString()}</span>
+                  <span>{t("invites.expiresOn", { when: new Date(invite.expiresAt).toLocaleDateString() })}</span>
                 </div>
               </div>
               <Button disabled={busyId === invite.id} onClick={() => handleAccept(invite)}>
-                {busyId === invite.id ? "Joining…" : "Accept"}
+                {busyId === invite.id ? t("invites.joining") : t("invites.accept")}
               </Button>
             </div>
           ))}
@@ -79,9 +81,9 @@ export function InvitesPageClient() {
       ) : (
         <div className="flex flex-col items-center justify-center py-20 text-neutral-400">
           <div className="text-[15px] font-bold text-neutral-900 dark:text-neutral-100">
-            No pending invites
+            {t("invites.empty")}
           </div>
-          <div className="mt-1 text-[13px]">Team invites sent to your email will show up here.</div>
+          <div className="mt-1 text-[13px]">{t("invites.emptyHint")}</div>
         </div>
       )}
     </div>

@@ -7,11 +7,13 @@ import { createClient } from "@/lib/supabase/client";
 import { resetPasswordSchema } from "@/validation/auth.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 type LinkState = "verifying" | "ready" | "invalid";
 
 export function ResetPasswordForm() {
   const router = useRouter();
+  const { t } = useI18n();
   const [linkState, setLinkState] = useState<LinkState>("verifying");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -86,7 +88,7 @@ export function ResetPasswordForm() {
   if (linkState === "verifying") {
     return (
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        Verifying your reset link…
+        {t("auth.verifyingLink")}
       </p>
     );
   }
@@ -94,11 +96,9 @@ export function ResetPasswordForm() {
   if (linkState === "invalid") {
     return (
       <div className="flex flex-col gap-3">
-        <p className="text-sm text-red-600">
-          This reset link is invalid or has expired.
-        </p>
+        <p className="text-sm text-red-600">{t("auth.resetLinkInvalid")}</p>
         <Link href="/forgot-password" className="text-sm underline">
-          Request a new link
+          {t("auth.requestNewLink")}
         </Link>
       </div>
     );
@@ -108,7 +108,7 @@ export function ResetPasswordForm() {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         id="newPassword"
-        label="New password"
+        label={t("auth.newPassword")}
         type="password"
         value={newPassword}
         onChange={(e) => setNewPassword(e.target.value)}
@@ -119,7 +119,7 @@ export function ResetPasswordForm() {
       />
       <Input
         id="confirmPassword"
-        label="Confirm new password"
+        label={t("auth.confirmNewPassword")}
         type="password"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
@@ -128,7 +128,7 @@ export function ResetPasswordForm() {
       />
       {formError && <p className="text-sm text-red-600">{formError}</p>}
       <Button type="submit" disabled={submitting}>
-        {submitting ? "Updating…" : "Update password"}
+        {submitting ? t("auth.updating") : t("auth.updatePassword")}
       </Button>
     </form>
   );

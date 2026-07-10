@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import { updateTeamSchema } from "@/validation/team.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 export function TeamSettingsForm({ teamId, initialName }: { teamId: string; initialName: string }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [name, setName] = useState(initialName);
   const [fieldError, setFieldError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
@@ -37,11 +39,11 @@ export function TeamSettingsForm({ teamId, initialName }: { teamId: string; init
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setFormError(body?.error?.message ?? "Failed to update team");
+      setFormError(body?.error?.message ?? t("teamSettings.updateFailed"));
       return;
     }
 
-    setNotice("Team updated");
+    setNotice(t("teamSettings.updated"));
     router.refresh();
   }
 
@@ -49,7 +51,7 @@ export function TeamSettingsForm({ teamId, initialName }: { teamId: string; init
     <form onSubmit={handleSubmit} className="flex max-w-md flex-col gap-4">
       <Input
         id="teamName"
-        label="Team name"
+        label={t("teamSettings.teamName")}
         value={name}
         onChange={(e) => setName(e.target.value)}
         error={fieldError}
@@ -59,7 +61,7 @@ export function TeamSettingsForm({ teamId, initialName }: { teamId: string; init
       {formError && <p className="text-sm text-red-600">{formError}</p>}
       {notice && <p className="text-sm text-green-600">{notice}</p>}
       <Button type="submit" disabled={submitting} className="self-start">
-        {submitting ? "Saving…" : "Save changes"}
+        {submitting ? t("common.saving") : t("profile.saveChanges")}
       </Button>
     </form>
   );

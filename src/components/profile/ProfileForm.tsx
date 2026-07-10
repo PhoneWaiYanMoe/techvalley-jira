@@ -6,6 +6,7 @@ import { updateProfileSchema } from "@/validation/profile.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Avatar } from "@/components/ui/Avatar";
+import { useI18n } from "@/lib/i18n/client";
 
 function getInitials(name: string): string {
   return (
@@ -29,6 +30,7 @@ export function ProfileForm({
   email: string;
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [name, setName] = useState(initialName);
   const [profileImage, setProfileImage] = useState(initialProfileImage ?? "");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -66,21 +68,21 @@ export function ProfileForm({
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setFormError(body?.error?.message ?? "Failed to update profile");
+      setFormError(body?.error?.message ?? t("profile.updateFailed"));
       return;
     }
 
-    setNotice("Profile updated");
+    setNotice(t("profile.updated"));
     router.refresh();
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Avatar src={profileImage} initials={getInitials(name)} size={56} className="text-lg" />
-      <Input id="email" label="Email" value={email} disabled />
+      <Input id="email" label={t("auth.email")} value={email} disabled />
       <Input
         id="name"
-        label="Name"
+        label={t("auth.name")}
         value={name}
         onChange={(e) => setName(e.target.value)}
         error={fieldErrors.name}
@@ -89,7 +91,7 @@ export function ProfileForm({
       />
       <Input
         id="profileImage"
-        label="Profile image URL"
+        label={t("profile.imageUrl")}
         value={profileImage}
         onChange={(e) => setProfileImage(e.target.value)}
         error={fieldErrors.profileImage}
@@ -98,7 +100,7 @@ export function ProfileForm({
       {formError && <p className="text-sm text-red-600">{formError}</p>}
       {notice && <p className="text-sm text-green-600">{notice}</p>}
       <Button type="submit" disabled={submitting} className="self-start">
-        {submitting ? "Saving…" : "Save changes"}
+        {submitting ? t("common.saving") : t("profile.saveChanges")}
       </Button>
     </form>
   );

@@ -3,11 +3,13 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 // FR-004: same flow for both login and signup — Supabase auto-registers new
 // users and logs in existing ones. Treated as a separate auth method from
 // email/password (no account merging), per PRD.
 export function GoogleSignInButton() {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,7 +33,7 @@ export function GoogleSignInButton() {
   return (
     <div className="flex flex-col gap-2">
       <Button type="button" variant="secondary" disabled={loading} onClick={handleClick}>
-        {loading ? "Redirecting…" : "Continue with Google"}
+        {loading ? t("auth.redirecting") : t("auth.continueWithGoogle")}
       </Button>
       {error && <p className="text-sm text-red-600">{error}</p>}
     </div>

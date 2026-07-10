@@ -7,6 +7,7 @@ import { RoleBadge } from "@/components/team/RoleBadge";
 import { Button } from "@/components/ui/Button";
 import { InviteMemberModal } from "@/components/team/InviteMemberModal";
 import { isOwnerOrAdmin } from "@/lib/permissions/team-role";
+import { useI18n } from "@/lib/i18n/client";
 
 function canKick(myRole: TeamRole, targetRole: TeamRole): boolean {
   if (myRole === "OWNER") return true;
@@ -28,6 +29,7 @@ export function MembersPageClient({
   initialInvites: InviteResponse[];
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const canManage = isOwnerOrAdmin(myRole);
   const [members, setMembers] = useState(initialMembers);
   const [invites, setInvites] = useState(initialInvites);
@@ -48,7 +50,7 @@ export function MembersPageClient({
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setActionError(body?.error?.message ?? "Failed to resend invite");
+      setActionError(body?.error?.message ?? t("members.resendFailed"));
       return;
     }
     const updated: InviteResponse = await res.json();
@@ -64,7 +66,7 @@ export function MembersPageClient({
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setActionError(body?.error?.message ?? "Failed to remove member");
+      setActionError(body?.error?.message ?? t("members.removeFailed"));
       return;
     }
     setMembers((prev) => prev.filter((m) => m.userId !== userId));
@@ -78,7 +80,7 @@ export function MembersPageClient({
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setActionError(body?.error?.message ?? "Failed to leave team");
+      setActionError(body?.error?.message ?? t("members.leaveFailed"));
       setConfirmLeave(false);
       return;
     }
@@ -103,7 +105,7 @@ export function MembersPageClient({
 
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      setActionError(body?.error?.message ?? "Failed to update role");
+      setActionError(body?.error?.message ?? t("members.roleUpdateFailed"));
       return;
     }
 
@@ -125,7 +127,7 @@ export function MembersPageClient({
       {canManage && (
         <div className="flex justify-end">
           <Button onClick={() => setInviteModalOpen(true)} className="text-xs">
-            Invite member
+            {t("members.invite")}
           </Button>
         </div>
       )}
@@ -135,9 +137,9 @@ export function MembersPageClient({
           <table className="w-full text-left text-[13px]">
             <thead className="bg-neutral-50 text-[11px] font-bold uppercase tracking-widest text-neutral-400 dark:bg-neutral-900">
               <tr>
-                <th className="px-4 py-3">Pending invite</th>
-                <th className="px-4 py-3">Role</th>
-                <th className="px-4 py-3">Expires</th>
+                <th className="px-4 py-3">{t("members.pendingInvite")}</th>
+                <th className="px-4 py-3">{t("members.role")}</th>
+                <th className="px-4 py-3">{t("members.expires")}</th>
                 <th className="px-4 py-3" />
               </tr>
             </thead>
@@ -151,7 +153,9 @@ export function MembersPageClient({
                       <RoleBadge role={invite.role} />
                     </td>
                     <td className={`px-4 py-3 ${expired ? "text-red-600" : "text-neutral-500"}`}>
-                      {expired ? "Expired" : new Date(invite.expiresAt).toLocaleDateString()}
+                      {expired
+                        ? t("members.expired")
+                        : new Date(invite.expiresAt).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button
@@ -160,7 +164,7 @@ export function MembersPageClient({
                         onClick={() => handleResendInvite(invite.id)}
                         className="px-2.5 py-1 text-xs"
                       >
-                        Resend
+                        {t("members.resend")}
                       </Button>
                     </td>
                   </tr>
@@ -175,10 +179,10 @@ export function MembersPageClient({
         <table className="w-full text-left text-[13px]">
           <thead className="bg-neutral-50 text-[11px] font-bold uppercase tracking-widest text-neutral-400 dark:bg-neutral-900">
             <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Joined</th>
+              <th className="px-4 py-3">{t("members.name")}</th>
+              <th className="px-4 py-3">{t("members.email")}</th>
+              <th className="px-4 py-3">{t("members.role")}</th>
+              <th className="px-4 py-3">{t("members.joined")}</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
@@ -190,21 +194,22 @@ export function MembersPageClient({
               return (
                 <tr key={member.userId}>
                   <td className="px-4 py-3 font-semibold">
-                    {member.name} {isSelf && <span className="text-neutral-400">(you)</span>}
+                    {member.name}{" "}
+                    {isSelf && <span className="text-neutral-400">{t("members.you")}</span>}
                   </td>
                   <td className="px-4 py-3 text-neutral-500">{member.email ?? "—"}</td>
                   <td className="px-4 py-3">
                     {showRoleControl ? (
                       confirmTransferTo === member.userId ? (
                         <span className="flex items-center gap-2">
-                          <span className="text-neutral-500">Make owner?</span>
+                          <span className="text-neutral-500">{t("members.makeOwner")}</span>
                           <Button
                             variant="danger"
                             disabled={busy}
                             onClick={() => handleRoleChange(member.userId, "OWNER")}
                             className="px-2.5 py-1 text-xs"
                           >
-                            Yes
+                            {t("members.yes")}
                           </Button>
                           <Button
                             variant="secondary"
@@ -212,7 +217,7 @@ export function MembersPageClient({
                             onClick={() => setConfirmTransferTo(null)}
                             className="px-2.5 py-1 text-xs"
                           >
-                            Cancel
+                            {t("common.cancel")}
                           </Button>
                         </span>
                       ) : (
@@ -222,9 +227,9 @@ export function MembersPageClient({
                           onChange={(e) => handleRoleChange(member.userId, e.target.value as TeamRole)}
                           className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-semibold dark:border-neutral-700 dark:bg-neutral-900"
                         >
-                          <option value="MEMBER">MEMBER</option>
-                          <option value="ADMIN">ADMIN</option>
-                          <option value="OWNER">Transfer ownership…</option>
+                          <option value="MEMBER">{t("role.MEMBER")}</option>
+                          <option value="ADMIN">{t("role.ADMIN")}</option>
+                          <option value="OWNER">{t("members.transferOwnership")}</option>
                         </select>
                       )
                     ) : (
@@ -238,14 +243,14 @@ export function MembersPageClient({
                     {showKick &&
                       (confirmKickId === member.userId ? (
                         <span className="flex items-center justify-end gap-2">
-                          <span className="text-neutral-500">Remove?</span>
+                          <span className="text-neutral-500">{t("members.removeConfirm")}</span>
                           <Button
                             variant="danger"
                             disabled={busy}
                             onClick={() => handleKick(member.userId)}
                             className="px-2.5 py-1 text-xs"
                           >
-                            Yes
+                            {t("members.yes")}
                           </Button>
                           <Button
                             variant="secondary"
@@ -253,7 +258,7 @@ export function MembersPageClient({
                             onClick={() => setConfirmKickId(null)}
                             className="px-2.5 py-1 text-xs"
                           >
-                            Cancel
+                            {t("common.cancel")}
                           </Button>
                         </span>
                       ) : (
@@ -262,7 +267,7 @@ export function MembersPageClient({
                           onClick={() => setConfirmKickId(member.userId)}
                           className="px-2.5 py-1 text-xs"
                         >
-                          Remove
+                          {t("members.remove")}
                         </Button>
                       ))}
                   </td>
@@ -277,17 +282,17 @@ export function MembersPageClient({
         <div className="self-start">
           {confirmLeave ? (
             <span className="flex items-center gap-2 text-sm">
-              Leave this team?
+              {t("members.leaveConfirm")}
               <Button variant="danger" disabled={busy} onClick={handleLeave}>
-                Yes, leave
+                {t("members.leaveYes")}
               </Button>
               <Button variant="secondary" disabled={busy} onClick={() => setConfirmLeave(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
             </span>
           ) : (
             <Button variant="secondary" onClick={() => setConfirmLeave(true)}>
-              Leave team
+              {t("members.leaveTeam")}
             </Button>
           )}
         </div>
