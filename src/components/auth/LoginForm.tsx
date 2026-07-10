@@ -7,15 +7,17 @@ import { createClient } from "@/lib/supabase/client";
 import { loginSchema } from "@/validation/auth.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 export function LoginForm() {
   const router = useRouter();
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const passwordUpdated =
     searchParams.get("reset") === "success" || searchParams.get("passwordChanged") === "true";
   const oauthError =
     searchParams.get("error") === "oauth_failed"
-      ? (searchParams.get("errorMessage") ?? "Google sign-in failed")
+      ? (searchParams.get("errorMessage") ?? t("auth.googleFailed"))
       : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +47,7 @@ export function LoginForm() {
     setSubmitting(false);
 
     if (error) {
-      setFormError("Email or password is incorrect");
+      setFormError(t("auth.invalidCredentials"));
       return;
     }
 
@@ -56,14 +58,12 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {passwordUpdated && (
-        <p className="text-sm text-green-600">
-          Password updated. Log in with your new password.
-        </p>
+        <p className="text-sm text-green-600">{t("auth.passwordUpdated")}</p>
       )}
       {oauthError && <p className="text-sm text-red-600">{oauthError}</p>}
       <Input
         id="email"
-        label="Email"
+        label={t("auth.email")}
         type="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
@@ -72,7 +72,7 @@ export function LoginForm() {
       />
       <Input
         id="password"
-        label="Password"
+        label={t("auth.password")}
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -81,17 +81,17 @@ export function LoginForm() {
       />
       {formError && <p className="text-sm text-red-600">{formError}</p>}
       <Button type="submit" disabled={submitting}>
-        {submitting ? "Logging in…" : "Log in"}
+        {submitting ? t("auth.loggingIn") : t("auth.login")}
       </Button>
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
         <Link href="/forgot-password" className="underline">
-          Forgot password?
+          {t("auth.forgotPassword")}
         </Link>
       </p>
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        Don&apos;t have an account?{" "}
+        {t("auth.noAccount")}{" "}
         <Link href="/signup" className="font-medium underline">
-          Sign up
+          {t("auth.signup")}
         </Link>
       </p>
     </form>

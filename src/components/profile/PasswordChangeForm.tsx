@@ -6,9 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { changePasswordSchema } from "@/validation/profile.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -19,7 +21,7 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
   if (disabled) {
     return (
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        Password change is disabled for accounts that signed up via Google only.
+        {t("profile.googleOnly")}
       </p>
     );
   }
@@ -53,7 +55,7 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
     if (!res.ok) {
       setSubmitting(false);
       const body = await res.json().catch(() => null);
-      setFormError(body?.error?.message ?? "Failed to change password");
+      setFormError(body?.error?.message ?? t("profile.changeFailed"));
       return;
     }
 
@@ -71,7 +73,7 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         id="currentPassword"
-        label="Current password"
+        label={t("profile.currentPassword")}
         type="password"
         value={currentPassword}
         onChange={(e) => setCurrentPassword(e.target.value)}
@@ -80,7 +82,7 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
       />
       <Input
         id="newPassword"
-        label="New password"
+        label={t("auth.newPassword")}
         type="password"
         value={newPassword}
         onChange={(e) => setNewPassword(e.target.value)}
@@ -91,7 +93,7 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
       />
       <Input
         id="confirmPassword"
-        label="Confirm new password"
+        label={t("auth.confirmNewPassword")}
         type="password"
         value={confirmPassword}
         onChange={(e) => setConfirmPassword(e.target.value)}
@@ -100,7 +102,7 @@ export function PasswordChangeForm({ disabled }: { disabled: boolean }) {
       />
       {formError && <p className="text-sm text-red-600">{formError}</p>}
       <Button type="submit" disabled={submitting} className="self-start">
-        {submitting ? "Changing…" : "Change password"}
+        {submitting ? t("profile.changing") : t("profile.changePassword")}
       </Button>
     </form>
   );

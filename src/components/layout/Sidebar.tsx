@@ -5,11 +5,15 @@ import { usePathname } from "next/navigation";
 import { LogoutButton } from "@/components/auth/LogoutButton";
 import { Avatar } from "@/components/ui/Avatar";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { LanguageSwitcher } from "@/components/ui/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n/client";
+import type { MessageKey } from "@/lib/i18n/dictionaries";
 
 const NAV_ITEMS = [
   {
     key: "projects",
-    label: "Projects",
+    label: "nav.projects" as MessageKey,
     href: "/projects",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -22,7 +26,7 @@ const NAV_ITEMS = [
   },
   {
     key: "dashboard",
-    label: "Dashboard",
+    label: "nav.dashboard" as MessageKey,
     href: "/dashboard",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -33,7 +37,7 @@ const NAV_ITEMS = [
   },
   {
     key: "teams",
-    label: "Teams",
+    label: "nav.teams" as MessageKey,
     href: "/teams",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -45,7 +49,7 @@ const NAV_ITEMS = [
   },
   {
     key: "invites",
-    label: "Invites",
+    label: "nav.invites" as MessageKey,
     href: "/invites",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -56,7 +60,7 @@ const NAV_ITEMS = [
   },
   {
     key: "activity",
-    label: "Activity",
+    label: "nav.activity" as MessageKey,
     href: "#",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -76,6 +80,7 @@ export function Sidebar({
   userImage?: string | null;
 }) {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   // Determine active nav item
   const activeKey = pathname.startsWith("/projects")
@@ -96,12 +101,13 @@ export function Sidebar({
           T
         </div>
         <span className="flex-1 text-[15px] font-bold tracking-tight">TechValley</span>
+        <ThemeToggle />
         <NotificationBell />
       </div>
 
       {/* Workspace label */}
       <div className="px-2.5 pb-1.5 pt-2 text-[10px] font-bold uppercase tracking-widest text-neutral-400">
-        Workspace
+        {t("nav.workspace")}
       </div>
 
       {/* Nav items */}
@@ -119,13 +125,18 @@ export function Sidebar({
               }`}
             >
               <span className="flex">{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
+              <span className="flex-1">{t(item.label)}</span>
             </Link>
           );
         })}
       </nav>
 
       <div className="flex-1" />
+
+      {/* Language */}
+      <div className="px-2 pb-3">
+        <LanguageSwitcher className="w-full" />
+      </div>
 
       {/* User info */}
       <div className="flex items-center gap-2.5 border-t border-neutral-200 px-2 pt-3 dark:border-neutral-800">

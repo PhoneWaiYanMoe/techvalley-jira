@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTeam } from "@/lib/team/team.service";
 import { ApiError } from "@/lib/utils/errors";
 import { TeamTabs } from "@/components/team/TeamTabs";
+import { getT } from "@/lib/i18n/server";
 
 export default async function TeamLayout({
   children,
@@ -32,20 +33,23 @@ export default async function TeamLayout({
     throw err;
   }
 
+  const t = await getT();
   const canManage = team.myRole === "OWNER" || team.myRole === "ADMIN";
   const tabs = [
-    { key: "overview", label: "Overview", href: `/teams/${teamId}` },
-    { key: "members", label: "Members", href: `/teams/${teamId}/members` },
-    { key: "activity", label: "Activity", href: `/teams/${teamId}/activity` },
-    { key: "statistics", label: "Statistics", href: `/teams/${teamId}/statistics` },
-    ...(canManage ? [{ key: "settings", label: "Settings", href: `/teams/${teamId}/settings` }] : []),
+    { key: "overview", label: t("teams.tabOverview"), href: `/teams/${teamId}` },
+    { key: "members", label: t("teams.tabMembers"), href: `/teams/${teamId}/members` },
+    { key: "activity", label: t("teams.tabActivity"), href: `/teams/${teamId}/activity` },
+    { key: "statistics", label: t("teams.tabStatistics"), href: `/teams/${teamId}/statistics` },
+    ...(canManage
+      ? [{ key: "settings", label: t("teams.tabSettings"), href: `/teams/${teamId}/settings` }]
+      : []),
   ];
 
   return (
     <div className="p-6 pb-10">
       <div className="mb-4 flex items-center gap-2">
         <Link href="/teams" className="text-sm text-neutral-400 hover:underline">
-          Teams
+          {t("teams.title")}
         </Link>
         <span className="text-sm text-neutral-300">/</span>
         <h1 className="text-xl font-bold tracking-tight">{team.name}</h1>

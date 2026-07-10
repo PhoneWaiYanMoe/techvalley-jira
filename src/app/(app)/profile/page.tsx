@@ -5,6 +5,7 @@ import { getProfile } from "@/lib/profile/profile.service";
 import { ProfileForm } from "@/components/profile/ProfileForm";
 import { PasswordChangeForm } from "@/components/profile/PasswordChangeForm";
 import { DeleteAccountSection } from "@/components/profile/DeleteAccountSection";
+import { getT } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: "Profile — TechValley Jira Lite",
@@ -22,11 +23,12 @@ export default async function ProfilePage() {
 
   const profile = await getProfile(user);
   const hasEmailIdentity = user.identities?.some((i) => i.provider === "email") ?? false;
+  const t = await getT();
 
   return (
     <div className="flex flex-col gap-10 p-6 pb-10">
       <section>
-        <h1 className="text-xl font-semibold">Profile</h1>
+        <h1 className="text-xl font-semibold">{t("profile.title")}</h1>
         <div className="mt-4 max-w-md">
           <ProfileForm
             initialName={profile.name}
@@ -36,7 +38,7 @@ export default async function ProfilePage() {
         </div>
       </section>
       <section>
-        <h2 className="text-lg font-semibold">Change password</h2>
+        <h2 className="text-lg font-semibold">{t("profile.changePassword")}</h2>
         <div className="mt-4 max-w-md">
           <PasswordChangeForm disabled={!hasEmailIdentity} />
         </div>

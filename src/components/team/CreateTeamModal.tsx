@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { TeamResponse } from "@/types/api";
+import { useI18n } from "@/lib/i18n/client";
 
 export function CreateTeamModal({
   onClose,
@@ -10,6 +11,7 @@ export function CreateTeamModal({
   onClose: () => void;
   onCreated: (team: TeamResponse) => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -31,13 +33,13 @@ export function CreateTeamModal({
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error?.message ?? "Failed to create team");
+        throw new Error(data.error?.message ?? t("teams.createFailed"));
       }
 
       const team: TeamResponse = await res.json();
       onCreated(team);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Something went wrong");
+      setFormError(err instanceof Error ? err.message : t("common.error"));
     } finally {
       setSubmitting(false);
     }
@@ -54,7 +56,7 @@ export function CreateTeamModal({
       >
         {/* Header */}
         <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-bold tracking-tight">New team</h2>
+          <h2 className="text-lg font-bold tracking-tight">{t("teams.newTeam")}</h2>
           <button
             onClick={onClose}
             className="flex h-[30px] w-[30px] items-center justify-center rounded-lg bg-neutral-100 text-neutral-500 dark:bg-neutral-800"
@@ -66,11 +68,13 @@ export function CreateTeamModal({
         </div>
 
         {/* Name */}
-        <label className="mb-1.5 block text-xs font-bold text-neutral-500">Name</label>
+        <label className="mb-1.5 block text-xs font-bold text-neutral-500">
+          {t("teams.name")}
+        </label>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Platform Team"
+          placeholder={t("teams.namePlaceholder")}
           maxLength={50}
           className="mb-1 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[13.5px] text-neutral-900 outline-none focus:ring-2 focus:ring-neutral-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-600"
         />
@@ -87,14 +91,14 @@ export function CreateTeamModal({
             onClick={onClose}
             className="rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-[13px] font-semibold text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleCreate}
             disabled={disabled}
             className="rounded-lg bg-indigo-600 px-4.5 py-2.5 text-[13px] font-bold text-white shadow-sm transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {submitting ? "Creating…" : "Create team"}
+            {submitting ? t("common.creating") : t("teams.createTeam")}
           </button>
         </div>
       </div>

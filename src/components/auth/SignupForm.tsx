@@ -7,9 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { signupSchema } from "@/validation/auth.schema";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 export function SignupForm() {
   const router = useRouter();
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,7 +49,7 @@ export function SignupForm() {
     if (error) {
       setFormError(
         error.message.toLowerCase().includes("already registered")
-          ? "An account with this email already exists."
+          ? t("auth.emailExists")
           : error.message,
       );
       return;
@@ -63,21 +65,19 @@ export function SignupForm() {
     // object with an empty `identities` array. That's the documented signal
     // to distinguish this from a genuine new signup pending confirmation.
     if (data.user && data.user.identities?.length === 0) {
-      setFormError(
-        "This email may already be registered. Try logging in, or use \"Forgot password\" if you don't remember your password.",
-      );
+      setFormError(t("auth.emailMaybeRegistered"));
       return;
     }
 
     // Email confirmation is enabled — no session yet.
-    setNotice("Check your email to confirm your account before logging in.");
+    setNotice(t("auth.checkEmail"));
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <Input
         id="name"
-        label="Name"
+        label={t("auth.name")}
         value={name}
         onChange={(e) => setName(e.target.value)}
         error={fieldErrors.name}
@@ -86,7 +86,7 @@ export function SignupForm() {
       />
       <Input
         id="email"
-        label="Email"
+        label={t("auth.email")}
         type="email"
         value={email}
         onChange={(e) => setEmail(e.target.value)}
@@ -96,7 +96,7 @@ export function SignupForm() {
       />
       <Input
         id="password"
-        label="Password"
+        label={t("auth.password")}
         type="password"
         value={password}
         onChange={(e) => setPassword(e.target.value)}
@@ -108,12 +108,12 @@ export function SignupForm() {
       {formError && <p className="text-sm text-red-600">{formError}</p>}
       {notice && <p className="text-sm text-green-600">{notice}</p>}
       <Button type="submit" disabled={submitting}>
-        {submitting ? "Creating account…" : "Sign up"}
+        {submitting ? t("auth.creatingAccount") : t("auth.signup")}
       </Button>
       <p className="text-sm text-neutral-600 dark:text-neutral-400">
-        Already have an account?{" "}
+        {t("auth.haveAccount")}{" "}
         <Link href="/login" className="font-medium underline">
-          Log in
+          {t("auth.login")}
         </Link>
       </p>
     </form>

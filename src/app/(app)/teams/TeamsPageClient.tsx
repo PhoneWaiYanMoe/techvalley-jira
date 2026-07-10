@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import type { TeamResponse } from "@/types/api";
 import { TeamCard } from "@/components/team/TeamCard";
 import { CreateTeamModal } from "@/components/team/CreateTeamModal";
+import { useI18n } from "@/lib/i18n/client";
 
 export function TeamsPageClient() {
   const router = useRouter();
+  const { t } = useI18n();
   const [teams, setTeams] = useState<TeamResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -33,7 +35,7 @@ export function TeamsPageClient() {
       {/* Top bar */}
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-baseline gap-2.5">
-          <h1 className="text-xl font-bold tracking-tight">Teams</h1>
+          <h1 className="text-xl font-bold tracking-tight">{t("teams.title")}</h1>
           <span className="font-mono text-sm text-neutral-400">{teams.length}</span>
         </div>
         <button
@@ -43,7 +45,7 @@ export function TeamsPageClient() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
             <path d="M12 5v14M5 12h14" />
           </svg>
-          New team
+          {t("teams.newTeam")}
         </button>
       </div>
 
@@ -68,9 +70,9 @@ export function TeamsPageClient() {
             </svg>
           </div>
           <div className="text-[15px] font-bold text-neutral-900 dark:text-neutral-100">
-            No teams yet
+            {t("teams.noTeams")}
           </div>
-          <div className="mt-1 text-[13px]">Create a team to start adding projects and members.</div>
+          <div className="mt-1 text-[13px]">{t("teams.noTeamsHint")}</div>
         </div>
       )}
 

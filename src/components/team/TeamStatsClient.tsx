@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { TeamStatsResponse, StatsPeriod } from "@/types/api";
 import { LineChart } from "@/components/dashboard/LineChart";
 import { BarChart } from "@/components/projects/BarChart";
+import { useI18n } from "@/lib/i18n/client";
 
 const AVATAR_COLORS = ["#6366f1", "#0ea5e9", "#e0982e", "#f43f5e", "#8b5cf6", "#10b981", "#14b8a6"];
 
@@ -24,11 +25,7 @@ function avatarColor(index: number): string {
   return AVATAR_COLORS[index % AVATAR_COLORS.length];
 }
 
-const PERIODS: { value: StatsPeriod; label: string }[] = [
-  { value: 7, label: "7 days" },
-  { value: 30, label: "30 days" },
-  { value: 90, label: "90 days" },
-];
+const PERIODS: StatsPeriod[] = [7, 30, 90];
 
 export function TeamStatsClient({
   teamId,
@@ -37,6 +34,7 @@ export function TeamStatsClient({
   teamId: string;
   initialStats: TeamStatsResponse;
 }) {
+  const { t } = useI18n();
   const [stats, setStats] = useState(initialStats);
   const [period, setPeriod] = useState<StatsPeriod>(initialStats.period);
   const [loading, setLoading] = useState(false);
@@ -51,17 +49,17 @@ export function TeamStatsClient({
         const res = await fetch(`/api/teams/${teamId}/stats?period=${next}`);
         if (!res.ok) {
           const d = await res.json();
-          throw new Error(d.error?.message ?? "Failed to load statistics");
+          throw new Error(d.error?.message ?? t("stats.loadFailed"));
         }
         setStats(await res.json());
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+        setError(err instanceof Error ? err.message : t("common.error"));
       } finally {
         setLoading(false);
       }
     },
-    [period, teamId],
+    [period, teamId, t],
   );
 
   const {
@@ -82,16 +80,16 @@ export function TeamStatsClient({
         <div className="flex gap-1 rounded-lg border border-neutral-200 bg-white p-1 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
           {PERIODS.map((p) => (
             <button
-              key={p.value}
-              onClick={() => void changePeriod(p.value)}
+              key={p}
+              onClick={() => void changePeriod(p)}
               disabled={loading}
               className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed ${
-                period === p.value
+                period === p
                   ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400"
                   : "text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-800"
               }`}
             >
-              Last {p.label}
+              {t("stats.lastNDays", { n: p })}
             </button>
           ))}
         </div>
@@ -110,15 +108,19 @@ export function TeamStatsClient({
       <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
         <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <div className="mb-1 flex items-center justify-between">
-            <div className="text-[13.5px] font-bold">Issues created</div>
-            <span className="text-xs font-semibold text-neutral-400">{totalCreated} total</span>
+            <div className="text-[13.5px] font-bold">{t("stats.issuesCreated")}</div>
+            <span className="text-xs font-semibold text-neutral-400">
+              {t("stats.total", { n: totalCreated })}
+            </span>
           </div>
           <LineChart points={creationTrend} color="#6366f1" />
         </div>
         <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <div className="mb-1 flex items-center justify-between">
-            <div className="text-[13.5px] font-bold">Issues completed</div>
-            <span className="text-xs font-semibold text-neutral-400">{totalCompleted} total</span>
+            <div className="text-[13.5px] font-bold">{t("stats.issuesCompleted")}</div>
+            <span className="text-xs font-semibold text-neutral-400">
+              {t("stats.total", { n: totalCompleted })}
+            </span>
           </div>
           <LineChart points={completionTrend} color="#10b981" />
         </div>
@@ -127,7 +129,7 @@ export function TeamStatsClient({
       {/* Per-member breakdowns */}
       <div className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
         <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="mb-4 text-[13.5px] font-bold">Currently assigned per member</div>
+          <div className="mb-4 text-[13.5px] font-bold">{t("stats.assignedPerMember")}</div>
           <BarChart
             items={assignedPerMember.map((m, i) => ({
               label: m.name,
@@ -146,7 +148,7 @@ export function TeamStatsClient({
           />
         </div>
         <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="mb-4 text-[13.5px] font-bold">Completed per member (this period)</div>
+          <div className="mb-4 text-[13.5px] font-bold">{t("stats.completedPerMember")}</div>
           <BarChart
             items={completedPerMember.map((m, i) => ({
               label: m.name,
@@ -168,7 +170,7 @@ export function TeamStatsClient({
 
       {/* Status per project */}
       <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="mb-4 text-[13.5px] font-bold">Issue status per project</div>
+        <div className="mb-4 text-[13.5px] font-bold">{t("stats.statusPerProject")}</div>
         {statusPerProject.length > 0 ? (
           <div className="flex flex-col gap-3.5">
             {statusPerProject.map((p) => {
@@ -177,7 +179,9 @@ export function TeamStatsClient({
                 <div key={p.projectId} className="border-t border-neutral-100 pt-3.5 first:border-t-0 first:pt-0 dark:border-neutral-800">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[12.8px] font-semibold">{p.projectName}</span>
-                    <span className="text-[11px] text-neutral-400">{total} issues</span>
+                    <span className="text-[11px] text-neutral-400">
+                      {t("stats.issuesCount", { n: total })}
+                    </span>
                   </div>
                   {total > 0 ? (
                     <div className="flex h-2 overflow-hidden rounded-md bg-neutral-100 dark:bg-neutral-800">
@@ -193,7 +197,7 @@ export function TeamStatsClient({
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-neutral-400">No issues yet.</p>
+                    <p className="text-xs text-neutral-400">{t("stats.noIssues")}</p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-x-3.5 gap-y-1">
                     {p.statuses.map((s) => (
@@ -212,7 +216,7 @@ export function TeamStatsClient({
             })}
           </div>
         ) : (
-          <p className="py-3.5 text-xs text-neutral-400">No projects yet.</p>
+          <p className="py-3.5 text-xs text-neutral-400">{t("stats.noProjects")}</p>
         )}
       </div>
     </div>

@@ -1,4 +1,7 @@
+"use client";
+
 import type { TeamRole } from "@/types/api";
+import { useI18n } from "@/lib/i18n/client";
 
 const ROLE_STYLES: Record<TeamRole, string> = {
   OWNER: "bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400",
@@ -8,9 +11,10 @@ const ROLE_STYLES: Record<TeamRole, string> = {
 
 // Matches DESIGN.md's "Status Pills" pattern.
 export function RoleBadge({ role }: { role: TeamRole }) {
+  const { t } = useI18n();
   return (
     <span className={`rounded-full px-2.5 py-0.5 text-[10.5px] font-bold ${ROLE_STYLES[role]}`}>
-      {role}
+      {t(`role.${role}`)}
     </span>
   );
 }
