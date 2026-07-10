@@ -579,6 +579,100 @@ limits/drag-drop), and a project settings page. One merge conflict, resolved:
 - The merge itself (`git add`/`git commit`) is Eric's to run per the git-authority
   rule below — Claude only resolved the conflicted file's contents.
 
+## Dev B — comments, AI features, dark/light mode + i18n scaffold (pulled 2026-07-10)
+
+Another large drop: FR-060..063 (comments), FR-040..045 (AI summary/suggestion/
+auto-label/duplicate-check/comment-summary via Gemini), plus two commits titled
+"update the dark/light mode, pre setup for language switch" and "unfinished tasks
+for langauge switch" — Dev B explicitly asked that the dark/light + password
+eye-toggle + language-switch work be finished, since he'd only partially wired it
+up. Investigated and finished:
+
+- **Dark/light mode** — turned out to already be fully built and working:
+  `ThemeToggle.tsx` (flips a `.dark` class on `<html>`, persists to
+  `localStorage`, matches OS preference on first visit via an inline
+  pre-hydration script in `app/layout.tsx` to avoid a flash), Tailwind v4's
+  `@custom-variant dark (&:where(.dark, .dark *))` in `globals.css`, and it's
+  wired into `Sidebar.tsx`. Nothing left to do here — verified working via
+  Playwright (toggle flips the class, persists to `localStorage`, survives a
+  reload).
+- **Password eye-toggle button** — also already fully built and already used
+  everywhere: `components/ui/Input.tsx` shows a show/hide icon button whenever
+  `type="password"`, and every password field in the app (`LoginForm`,
+  `SignupForm`, `ResetPasswordForm`, `PasswordChangeForm`,
+  `DeleteAccountSection`) already goes through the shared `Input` component.
+  Nothing left to do here either — verified working via Playwright.
+- **Language switch (i18n)** — this was the actually-unfinished piece.
+  Infrastructure (`src/lib/i18n/{config,client,server,translate}.ts` +
+  `dictionaries/en.ts`) is solid: cookie-based locale (`LOCALE_COOKIE`), a
+  `useI18n()` client hook and a `getT()` server helper sharing one `translate()`
+  lookup, `MessageKey` derived from `en.ts` so a `t("wrong.key")` call is a
+  compile error, not a silent runtime miss. Two real gaps:
+  1. `ko.ts`/`vi.ts` were just `{ ...en }` aliases (explicitly commented as a
+     "temporary" stopgap). Replaced both with full, real translations for
+     every key.
+  2. Only 29/80 `.tsx` files actually called `t()` — the "unfinished tasks"
+     commit covered auth/profile/teams/sidebar (i.e. mostly Dev A's Day 1-4
+     area) but not personal dashboard/team stats (my Day 6 work, built after
+     Dev B's i18n pass), invites, notifications, or the app shell. Converted
+     all of those (`PersonalDashboardClient.tsx`, `LineChart.tsx`,
+     `InvitesPageClient.tsx`, `NotificationsPageClient.tsx`,
+     `NotificationBell.tsx`, `(app)/layout.tsx`), adding ~35 new keys to
+     `en.ts`/`ko.ts`/`vi.ts` (`dashboard.*`, `invites.*`, `notifications.*`,
+     plus a few `common.*`/`time.*` additions) along the way.
+  - **Left un-converted on purpose**: Dev B's own screens — Projects, Issues,
+    Kanban, Labels, Subtasks, Comments, AI — still have hardcoded English
+    strings (`ProjectsPageClient`, `IssueDetailClient`, `KanbanBoardPage`,
+    `CommentList`, `IssueAiPanel`, etc., ~35 files). Consistent with this
+    project's existing dev-ownership split, that's Dev B's to finish, not
+    something I converted on his behalf without asking. Flag this to him.
+- **Real bug found + fixed while wiring `PersonalDashboardClient.tsx`**: its
+  data-fetching `useCallback` had `t` in its dependency array (added for an
+  error-message fallback). Since `t`'s identity changes on every locale
+  switch, this caused the mount `useEffect` (keyed on that callback) to
+  re-fire and re-fetch on every language change — the whole dashboard would
+  flash back to a loading spinner just from switching languages. Fixed by
+  removing `t` from the fetch path entirely and translating the rare
+  error-fallback message at render time instead, where `t` is safe to depend
+  on. Worth checking for the same pattern before adding `t()` calls inside any
+  other data-fetching `useCallback`/`useEffect` pair.
+- `@google/genai` (Gemini) added as a new dependency for the AI features —
+  needed `npm install` after the pull, same as `@hello-pangea/dnd` before it.
+- Verified after finishing: `npx tsc --noEmit` clean, `npx eslint .` clean
+  (0/0), `npm run build` succeeds (all 60+ routes compiled). E2E-tested via
+  scratch Playwright (18/18 passed): eye-toggle show/hide, dark-mode toggle +
+  `localStorage` persistence + reload persistence, and language switching
+  en→ko→vi→en across the Sidebar, personal dashboard, notifications, and
+  invites pages, plus locale persistence across reload (cookie-based).
+  Screenshots confirmed both themes and all three locales render cleanly with
+  no leftover English strings on the converted pages.
+
+### Follow-up fixes (2026-07-10, same day)
+
+- **Removed the dead "Activity" sidebar nav item.** It was a Day 4 stub
+  (`href="#"`) predating the real team activity feed — FR-019 was always
+  team-scoped (`GET /api/teams/:teamId/activity`, PRD's "Team Activity Log"),
+  never a global cross-team feed, and each team already has its own working
+  Activity tab (`/teams/:teamId/activity`). Same situation as the old
+  "Members" stub link fixed on Day 3 — no sensible single destination exists
+  for a standalone global version, so removed rather than repointed. Also
+  dropped the now-unused `nav.activity` key from all three dictionaries.
+- **Fixed a pre-existing `react-hooks/set-state-in-effect` lint error in
+  `ThemeToggle.tsx`** (Dev B's file, not mine, but found while re-verifying
+  lint after the Sidebar edit) — its mount effect called `setDark(...)`
+  synchronously to read the DOM's actual `.dark` class (for the toggle
+  button's `aria-label`/`title` text only; the icons themselves render via
+  CSS `dark:` variants, not this state). Fixed with the same "defer the
+  setState so it's not a direct statement in the effect body" shape as the
+  codebase's existing fetch-on-mount fix, using `queueMicrotask(() =>
+  setDark(...))` instead of an async IIFE (there's no actual async work here,
+  just a synchronous DOM read that needs to happen post-mount to avoid an
+  SSR/hydration mismatch).
+- Re-verified after both fixes: `tsc --noEmit` clean, `eslint .` clean (0/0),
+  `npm run build` succeeds, and the full Playwright suite re-run at 20/20
+  (added two assertions: no `href="#"` links in the sidebar nav, and the nav
+  now has exactly 4 items).
+
 ## Task division (current)
 
 - **Dev A** (Eric, branch `dev/Eric`): Auth (FR-001..007), Teams (FR-010..019),
