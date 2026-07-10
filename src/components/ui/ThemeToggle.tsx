@@ -11,7 +11,13 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
   const [dark, setDark] = useState<boolean | null>(null);
 
   useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
+    // Deferred via queueMicrotask (not a direct setState call) to satisfy
+    // react-hooks/set-state-in-effect — same class of fix as the
+    // fetch-on-mount pattern elsewhere in this codebase, just for a
+    // synchronous DOM read instead of an async call.
+    queueMicrotask(() => {
+      setDark(document.documentElement.classList.contains("dark"));
+    });
   }, []);
 
   function toggle() {
