@@ -3,16 +3,23 @@ import { ZodError } from "zod";
 export class ApiError extends Error {
   status: number;
   code: string;
+  headers?: Record<string, string>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, headers?: Record<string, string>) {
     super(message);
     this.status = status;
     this.code = code;
+    this.headers = headers;
   }
 }
 
-export function errorResponse(status: number, code: string, message: string) {
-  return Response.json({ error: { code, message } }, { status });
+export function errorResponse(
+  status: number,
+  code: string,
+  message: string,
+  headers?: Record<string, string>,
+) {
+  return Response.json({ error: { code, message } }, { status, headers });
 }
 
 // Wraps a route handler body: maps ApiError/ZodError to the api.md error
@@ -24,7 +31,7 @@ export async function withApiErrorHandling(
     return await handler();
   } catch (err) {
     if (err instanceof ApiError) {
-      return errorResponse(err.status, err.code, err.message);
+      return errorResponse(err.status, err.code, err.message, err.headers);
     }
     if (err instanceof ZodError) {
       return errorResponse(422, "VALIDATION_ERROR", err.issues[0]?.message ?? "Invalid input");

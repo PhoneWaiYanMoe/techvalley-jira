@@ -14,6 +14,8 @@ import { PriorityDot, DueBadge } from "@/components/issues/IssueBadges";
 import { LabelPicker } from "@/components/labels/LabelPicker";
 import { SubtaskList } from "@/components/subtasks/SubtaskList";
 import { IssueHistory } from "@/components/issues/IssueHistory";
+import { CommentList } from "@/components/comments/CommentList";
+import { IssueAiPanel } from "@/components/ai/IssueAiPanel";
 import type { SubtaskResponse } from "@/types/api";
 import type { UpdateIssueInput } from "@/validation/issue.schema";
 
@@ -292,15 +294,14 @@ export function IssueDetailClient({
             />
           </div>
 
-          {/* Comments — FR-060..063, Day 5 */}
+          {/* Comments — FR-060..063 */}
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="text-[13.5px] font-bold">
-              Comments{" "}
-              <span className="font-mono text-[11px] font-normal text-neutral-400">
-                {issue.commentCount}
-              </span>
-            </h2>
-            <p className="mt-2 text-[12.8px] text-neutral-400">Comments coming soon.</p>
+            <CommentList
+              issueId={issueId}
+              readOnly={readOnly}
+              initialCount={issue.commentCount}
+              onCountChange={(commentCount) => setIssue({ ...issue, commentCount })}
+            />
           </div>
 
           {/* Change history — FR-039 */}
@@ -404,26 +405,8 @@ export function IssueDetailClient({
             </div>
           </div>
 
-          {/* AI — FR-040/041, Day 5 */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <h2 className="mb-3 text-[13.5px] font-bold">AI</h2>
-            <div className="flex gap-2">
-              <button
-                disabled
-                title="Coming soon (FR-040)"
-                className="flex-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-400 disabled:cursor-not-allowed dark:border-neutral-700 dark:bg-neutral-800"
-              >
-                ✦ AI Summary
-              </button>
-              <button
-                disabled
-                title="Coming soon (FR-041)"
-                className="flex-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-[12px] font-semibold text-neutral-400 disabled:cursor-not-allowed dark:border-neutral-700 dark:bg-neutral-800"
-              >
-                ✦ AI Suggestion
-              </button>
-            </div>
-          </div>
+          {/* AI — FR-040/041 */}
+          <IssueAiPanel issueId={issueId} descriptionLength={(issue.description ?? "").trim().length} />
 
           {/* Danger zone — FR-035 */}
           {issue.canDelete && !readOnly && (

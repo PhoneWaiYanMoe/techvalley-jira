@@ -140,6 +140,38 @@ export type SubtaskResponse = {
   position: number;
 };
 
+// --- AI features (FR-040..045) ---
+
+export type AiSummaryResponse = { summary: string; cached: boolean };
+export type AiSuggestionResponse = { suggestion: string; cached: boolean };
+export type AiAutoLabelResponse = { labelIds: string[] }; // max 3, from existing project labels
+export type AiDuplicateCheckResponse = {
+  similarIssues: { id: string; title: string; similarity: number }[]; // max 3
+};
+export type AiCommentSummaryResponse = {
+  summary: string;
+  keyDecisions: string[];
+  cached: boolean;
+};
+
+// --- Comments (FR-060..063) ---
+
+export type CommentResponse = {
+  id: string;
+  content: string;
+  author: { id: string; name: string; initials: string; profileImage: string | null };
+  createdAt: string;
+  updatedAt: string;
+  edited: boolean; // updatedAt meaningfully later than createdAt
+  canEdit: boolean; // author only (FR-062)
+  canDelete: boolean; // author, issue owner, project owner, team OWNER/ADMIN (FR-063)
+};
+
+export type CommentListResponse = {
+  data: CommentResponse[];
+  nextCursor: string | null;
+};
+
 export type IssueDetailResponse = IssueResponse & {
   description: string | null;
   creator: { id: string; name: string };

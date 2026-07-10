@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { IssueResponse, LabelResponse, TeamMemberResponse } from "@/types/api";
+import type {
+  IssueResponse,
+  LabelResponse,
+  TeamMemberResponse,
+  AiAutoLabelResponse,
+  AiDuplicateCheckResponse,
+} from "@/types/api";
 import { LabelPicker } from "@/components/labels/LabelPicker";
 
 const selectClass =
@@ -28,6 +34,67 @@ export function CreateIssueModal({
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // FR-043 auto-label + FR-044 duplicate detection
+  const [autoLabeling, setAutoLabeling] = useState(false);
+  const [autoLabelNote, setAutoLabelNote] = useState<string | null>(null);
+  const [dupChecking, setDupChecking] = useState(false);
+  const [dupChecked, setDupChecked] = useState(false);
+  const [duplicates, setDuplicates] = useState<AiDuplicateCheckResponse["similarIssues"]>([]);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  async function suggestLabels() {
+    if (!title.trim() || autoLabeling) return;
+    setAutoLabeling(true);
+    setAiError(null);
+    setAutoLabelNote(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ai/auto-label`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), description: desc.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message ?? "Failed to suggest labels");
+      const { labelIds: suggested } = data as AiAutoLabelResponse;
+      if (suggested.length === 0) {
+        setAutoLabelNote("No label suggestions for this issue.");
+      } else {
+        const added = suggested.filter((id) => !labelIds.includes(id));
+        setLabelIds((prev) => [...new Set([...prev, ...suggested])]);
+        setAutoLabelNote(
+          added.length > 0
+            ? `Added ${added.length} suggested label${added.length > 1 ? "s" : ""}.`
+            : "Suggested labels are already selected.",
+        );
+      }
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Failed to suggest labels");
+    } finally {
+      setAutoLabeling(false);
+    }
+  }
+
+  async function checkDuplicates() {
+    if (!title.trim() || dupChecking) return;
+    setDupChecking(true);
+    setAiError(null);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/ai/duplicate-check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message ?? "Failed to check duplicates");
+      setDuplicates((data as AiDuplicateCheckResponse).similarIssues);
+      setDupChecked(true);
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Failed to check duplicates");
+    } finally {
+      setDupChecking(false);
+    }
+  }
 
   // FR-034: assignee options are the project's team members only
   useEffect(() => {
@@ -123,9 +190,48 @@ export function CreateIssueModal({
           maxLength={200}
           className="mb-1 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[13.5px] text-neutral-900 outline-none focus:ring-2 focus:ring-neutral-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-600"
         />
-        <div className="mb-3.5 text-right font-mono text-[10.5px] text-neutral-400">
-          {title.length}/200
+        <div className="mb-2 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => void checkDuplicates()}
+            disabled={!title.trim() || dupChecking}
+            className="text-[11px] font-semibold text-indigo-600 hover:underline disabled:opacity-50 disabled:no-underline dark:text-indigo-400"
+          >
+            {dupChecking ? "Checking…" : "✦ Check for duplicates"}
+          </button>
+          <span className="font-mono text-[10.5px] text-neutral-400">{title.length}/200</span>
         </div>
+
+        {/* FR-044: duplicate warning (informational — user can still create) */}
+        {dupChecked && duplicates.length > 0 && (
+          <div className="mb-3.5 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800/60 dark:bg-amber-950/30">
+            <p className="text-[11.5px] font-bold text-amber-700 dark:text-amber-400">
+              Possible duplicate{duplicates.length > 1 ? "s" : ""} found
+            </p>
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {duplicates.map((d) => (
+                <li key={d.id} className="text-[12px]">
+                  <a
+                    href={`/projects/${projectId}/issues/${d.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                  >
+                    {d.title}
+                  </a>
+                  <span className="ml-1.5 font-mono text-[10px] text-neutral-400">
+                    {Math.round(d.similarity * 100)}%
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {dupChecked && duplicates.length === 0 && (
+          <p className="mb-3.5 text-[11.5px] text-emerald-600 dark:text-emerald-400">
+            No similar issues found.
+          </p>
+        )}
 
         {/* Description */}
         <label className="mb-1.5 block text-xs font-bold text-neutral-500">
@@ -184,10 +290,24 @@ export function CreateIssueModal({
           ))}
         </select>
 
-        {/* Labels (FR-038) */}
-        <label className="mb-1.5 block text-xs font-bold text-neutral-500">
-          Labels <span className="font-normal text-neutral-400">· optional</span>
-        </label>
+        {/* Labels (FR-038) + AI auto-label (FR-043) */}
+        <div className="mb-1.5 flex items-center justify-between">
+          <label className="block text-xs font-bold text-neutral-500">
+            Labels <span className="font-normal text-neutral-400">· optional</span>
+          </label>
+          <button
+            type="button"
+            onClick={() => void suggestLabels()}
+            disabled={!title.trim() || autoLabeling || labels.length === 0}
+            title={labels.length === 0 ? "Create labels in project settings first" : undefined}
+            className="text-[11px] font-semibold text-indigo-600 hover:underline disabled:opacity-50 disabled:no-underline dark:text-indigo-400"
+          >
+            {autoLabeling ? "Suggesting…" : "✦ Suggest labels"}
+          </button>
+        </div>
+        {autoLabelNote && (
+          <p className="mb-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">{autoLabelNote}</p>
+        )}
         <div className="mb-5">
           <LabelPicker
             projectId={projectId}
@@ -199,6 +319,7 @@ export function CreateIssueModal({
         </div>
 
         {/* Error */}
+        {aiError && <p className="mb-3 text-[12.5px] text-rose-600">{aiError}</p>}
         {formError && <p className="mb-3 text-sm text-red-600">{formError}</p>}
 
         {/* Actions */}
