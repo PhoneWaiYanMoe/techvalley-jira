@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { NotificationResponse } from "@/types/api";
 import { Button } from "@/components/ui/Button";
+import { useI18n } from "@/lib/i18n/client";
 
 async function resolveHref(n: NotificationResponse): Promise<string | null> {
   if (n.relatedEntityType === "team" && n.relatedEntityId) return `/teams/${n.relatedEntityId}`;
@@ -22,6 +23,7 @@ async function resolveHref(n: NotificationResponse): Promise<string | null> {
 
 export function NotificationsPageClient() {
   const router = useRouter();
+  const { t } = useI18n();
   const [notifications, setNotifications] = useState<NotificationResponse[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -74,12 +76,12 @@ export function NotificationsPageClient() {
     <div className="p-6 pb-10">
       <div className="mb-5 flex items-center justify-between">
         <div className="flex items-baseline gap-2.5">
-          <h1 className="text-xl font-bold tracking-tight">Notifications</h1>
+          <h1 className="text-xl font-bold tracking-tight">{t("notifications.title")}</h1>
           <span className="font-mono text-sm text-neutral-400">{notifications.length}</span>
         </div>
         {unreadCount > 0 && (
           <Button variant="secondary" onClick={handleMarkAllRead} className="text-xs">
-            Mark all as read ({unreadCount})
+            {t("notifications.markAllReadCount", { n: unreadCount })}
           </Button>
         )}
       </div>
@@ -91,10 +93,10 @@ export function NotificationsPageClient() {
       ) : notifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-neutral-400">
           <div className="text-[15px] font-bold text-neutral-900 dark:text-neutral-100">
-            No notifications yet
+            {t("notifications.empty")}
           </div>
           <div className="mt-1 text-[13px]">
-            Assignments, comments, due dates, invites, and role changes will show up here.
+            {t("notifications.emptyHint")}
           </div>
         </div>
       ) : (
@@ -125,7 +127,7 @@ export function NotificationsPageClient() {
               onClick={loadMore}
               className="self-center"
             >
-              {loadingMore ? "Loading…" : "Load more"}
+              {loadingMore ? t("common.loading") : t("common.loadMore")}
             </Button>
           )}
         </div>

@@ -10,6 +10,7 @@ export function LanguageSwitcher({ className = "" }: { className?: string }) {
     <select
       value={locale}
       aria-label={t("common.language")}
+      data-testid="language-switcher"
       onChange={(e) => {
         if (isLocale(e.target.value)) setLocale(e.target.value);
       }}

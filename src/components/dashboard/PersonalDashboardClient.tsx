@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { PersonalDashboardResponse, PersonalDashboardIssue } from "@/types/api";
 import { StatusDonut } from "@/components/projects/StatusDonut";
+import { RoleBadge } from "@/components/team/RoleBadge";
+import { useI18n } from "@/lib/i18n/client";
 
 const STATUS_COLORS: Record<string, string> = {
   Backlog: "#94a3b8",
@@ -44,22 +46,27 @@ function IssueRow({ issue }: { issue: PersonalDashboardIssue }) {
 }
 
 export function PersonalDashboardClient() {
+  const { t } = useI18n();
   const [data, setData] = useState<PersonalDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Deliberately has no `t` dependency — `t`'s identity changes on every
+  // locale switch, and this effect firing on locale change would re-fetch
+  // and flash the loading spinner just from switching languages. The rare
+  // error-fallback message is translated at render time instead (below).
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/dashboard/personal");
       if (!res.ok) {
         const d = await res.json();
-        throw new Error(d.error?.message ?? "Failed to load dashboard");
+        throw new Error(d.error?.message ?? "");
       }
       setData(await res.json());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error && err.message ? err.message : null);
     } finally {
       setLoading(false);
     }
@@ -82,7 +89,7 @@ export function PersonalDashboardClient() {
   if (error || !data) {
     return (
       <div className="p-6 py-20 text-center">
-        <p className="text-sm text-red-600">{error ?? "Failed to load"}</p>
+        <p className="text-sm text-red-600">{error ?? t("dashboard.loadFailed")}</p>
       </div>
     );
   }
@@ -90,10 +97,10 @@ export function PersonalDashboardClient() {
   const { totalAssigned, issuesByStatus, dueTodayIssues, dueSoonIssues, recentComments, teams, projects } = data;
 
   const kpiCards = [
-    { label: "Assigned to me", value: totalAssigned, color: "#4f46e5" },
-    { label: "Due today", value: dueTodayIssues.length, color: "#f43f5e" },
-    { label: "Due within 7 days", value: dueSoonIssues.length, color: "#e0982e" },
-    { label: "My teams", value: teams.length, color: "#0ea5e9" },
+    { label: t("dashboard.assignedToMe"), value: totalAssigned, color: "#4f46e5" },
+    { label: t("dashboard.dueToday"), value: dueTodayIssues.length, color: "#f43f5e" },
+    { label: t("dashboard.dueWithin7Days"), value: dueSoonIssues.length, color: "#e0982e" },
+    { label: t("dashboard.myTeams"), value: teams.length, color: "#0ea5e9" },
   ];
 
   const statusSegments = issuesByStatus.map((s) => ({
@@ -104,7 +111,7 @@ export function PersonalDashboardClient() {
 
   return (
     <div className="p-6 pb-10">
-      <h1 className="mb-5 text-xl font-bold tracking-tight">My Dashboard</h1>
+      <h1 className="mb-5 text-xl font-bold tracking-tight">{t("dashboard.title")}</h1>
 
       {/* KPI row */}
       <div className="mb-4 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3.5">
@@ -128,12 +135,12 @@ export function PersonalDashboardClient() {
         {/* LEFT column */}
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <div className="mb-4.5 text-[13.5px] font-bold">My issues by status</div>
+            <div className="mb-4.5 text-[13.5px] font-bold">{t("dashboard.issuesByStatus")}</div>
             <StatusDonut segments={statusSegments} total={totalAssigned} />
           </div>
 
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <div className="mb-3.5 text-[13.5px] font-bold">Due today</div>
+            <div className="mb-3.5 text-[13.5px] font-bold">{t("dashboard.dueToday")}</div>
             {dueTodayIssues.length > 0 ? (
               <div className="flex flex-col">
                 {dueTodayIssues.map((issue) => (
@@ -141,14 +148,14 @@ export function PersonalDashboardClient() {
                 ))}
               </div>
             ) : (
-              <p className="py-3.5 text-xs text-neutral-400">Nothing due today.</p>
+              <p className="py-3.5 text-xs text-neutral-400">{t("dashboard.nothingDueToday")}</p>
             )}
           </div>
 
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
             <div className="mb-3.5 flex items-center justify-between">
-              <div className="text-[13.5px] font-bold">Due soon</div>
-              <span className="text-[11px] text-neutral-400">next 7 days</span>
+              <div className="text-[13.5px] font-bold">{t("dashboard.dueSoon")}</div>
+              <span className="text-[11px] text-neutral-400">{t("dashboard.next7Days")}</span>
             </div>
             {dueSoonIssues.length > 0 ? (
               <div className="flex flex-col">
@@ -157,7 +164,7 @@ export function PersonalDashboardClient() {
                 ))}
               </div>
             ) : (
-              <p className="py-3.5 text-xs text-neutral-400">Nothing due in the next 7 days.</p>
+              <p className="py-3.5 text-xs text-neutral-400">{t("dashboard.nothingDueSoon")}</p>
             )}
           </div>
         </div>
@@ -165,7 +172,7 @@ export function PersonalDashboardClient() {
         {/* RIGHT column */}
         <div className="flex flex-col gap-4">
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <div className="mb-3.5 text-[13.5px] font-bold">My teams</div>
+            <div className="mb-3.5 text-[13.5px] font-bold">{t("dashboard.myTeams")}</div>
             {teams.length > 0 ? (
               <div className="flex flex-col">
                 {teams.map((team) => (
@@ -175,17 +182,17 @@ export function PersonalDashboardClient() {
                     className="flex items-center justify-between border-t border-neutral-100 py-2.5 first:border-t-0 hover:bg-neutral-50 dark:border-neutral-800 dark:hover:bg-neutral-800/50"
                   >
                     <span className="truncate text-[12.8px] font-semibold">{team.name}</span>
-                    <span className="shrink-0 text-[11px] text-neutral-400">{team.myRole}</span>
+                    <RoleBadge role={team.myRole} />
                   </Link>
                 ))}
               </div>
             ) : (
-              <p className="py-3.5 text-xs text-neutral-400">You&apos;re not on any teams yet.</p>
+              <p className="py-3.5 text-xs text-neutral-400">{t("dashboard.noTeams")}</p>
             )}
           </div>
 
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <div className="mb-3.5 text-[13.5px] font-bold">My projects</div>
+            <div className="mb-3.5 text-[13.5px] font-bold">{t("dashboard.myProjects")}</div>
             {projects.length > 0 ? (
               <div className="flex flex-col">
                 {projects.slice(0, 8).map((project) => (
@@ -196,18 +203,18 @@ export function PersonalDashboardClient() {
                   >
                     <span className="truncate text-[12.8px] font-semibold">{project.name}</span>
                     {project.isArchived && (
-                      <span className="shrink-0 text-[11px] text-neutral-400">Archived</span>
+                      <span className="shrink-0 text-[11px] text-neutral-400">{t("common.archived")}</span>
                     )}
                   </Link>
                 ))}
               </div>
             ) : (
-              <p className="py-3.5 text-xs text-neutral-400">No projects yet.</p>
+              <p className="py-3.5 text-xs text-neutral-400">{t("dashboard.noProjects")}</p>
             )}
           </div>
 
           <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-            <div className="mb-3.5 text-[13.5px] font-bold">My recent comments</div>
+            <div className="mb-3.5 text-[13.5px] font-bold">{t("dashboard.recentComments")}</div>
             {recentComments.length > 0 ? (
               <div className="flex flex-col">
                 {recentComments.map((c) => (
@@ -224,7 +231,7 @@ export function PersonalDashboardClient() {
                 ))}
               </div>
             ) : (
-              <p className="py-3.5 text-xs text-neutral-400">No comments yet.</p>
+              <p className="py-3.5 text-xs text-neutral-400">{t("dashboard.noComments")}</p>
             )}
           </div>
         </div>

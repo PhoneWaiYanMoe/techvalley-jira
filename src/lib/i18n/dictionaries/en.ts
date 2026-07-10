@@ -21,6 +21,9 @@ export const en = {
   "common.unassigned": "Unassigned",
   "common.cached": "cached",
   "common.language": "Language",
+  "common.account": "Account",
+  "common.archived": "Archived",
+  "common.loadMore": "Load more",
 
   // Sidebar / navigation
   "nav.workspace": "Workspace",
@@ -28,7 +31,6 @@ export const en = {
   "nav.dashboard": "Dashboard",
   "nav.teams": "Teams",
   "nav.invites": "Invites",
-  "nav.activity": "Activity",
 
   // Auth
   "auth.email": "Email",
@@ -95,6 +97,9 @@ export const en = {
 
   // Relative time
   "time.today": "today",
+  "time.justNow": "just now",
+  "time.minsAgo": "{n}m ago",
+  "time.hoursAgo": "{n}h ago",
   "time.daysAgo": "{n}d ago",
   "time.weeksAgo": "{n}w ago",
   "time.monthsAgo": "{n}mo ago",
@@ -204,6 +209,43 @@ export const en = {
   "stats.issuesCount": "{n} issues",
   "stats.noIssues": "No issues yet.",
   "stats.noProjects": "No projects yet.",
+  "stats.noActivity": "No activity in this period.",
+
+  // Notifications
+  "notifications.title": "Notifications",
+  "notifications.markAllRead": "Mark all read",
+  "notifications.markAllReadCount": "Mark all as read ({n})",
+  "notifications.empty": "No notifications yet",
+  "notifications.emptyHint":
+    "Assignments, comments, due dates, invites, and role changes will show up here.",
+  "notifications.viewAll": "View all",
+
+  // Invites
+  "invites.title": "My invites",
+  "invites.acceptFailed": "Failed to accept invite",
+  "invites.joining": "Joining…",
+  "invites.accept": "Accept",
+  "invites.expiresOn": "Expires {when}",
+  "invites.empty": "No pending invites",
+  "invites.emptyHint": "Team invites sent to your email will show up here.",
+
+  // Personal dashboard
+  "dashboard.title": "My Dashboard",
+  "dashboard.loadFailed": "Failed to load dashboard",
+  "dashboard.assignedToMe": "Assigned to me",
+  "dashboard.dueToday": "Due today",
+  "dashboard.dueWithin7Days": "Due within 7 days",
+  "dashboard.myTeams": "My teams",
+  "dashboard.issuesByStatus": "My issues by status",
+  "dashboard.nothingDueToday": "Nothing due today.",
+  "dashboard.dueSoon": "Due soon",
+  "dashboard.next7Days": "next 7 days",
+  "dashboard.nothingDueSoon": "Nothing due in the next 7 days.",
+  "dashboard.noTeams": "You're not on any teams yet.",
+  "dashboard.myProjects": "My projects",
+  "dashboard.noProjects": "No projects yet.",
+  "dashboard.recentComments": "My recent comments",
+  "dashboard.noComments": "No comments yet.",
 } as const;
 
 export type MessageKey = keyof typeof en;

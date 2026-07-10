@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getProfile } from "@/lib/profile/profile.service";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { getT } from "@/lib/i18n/server";
 
 // Defense in depth: proxy.ts already redirects unauthenticated requests away
 // from this route group, but Next.js docs recommend re-checking auth here
@@ -21,7 +22,8 @@ export default async function AppLayout({
   }
 
   const profile = await getProfile(user);
-  const displayName = profile.name || profile.email || "Account";
+  const t = await getT();
+  const displayName = profile.name || profile.email || t("common.account");
   const initials = displayName
     .split(" ")
     .map((w) => w[0])
