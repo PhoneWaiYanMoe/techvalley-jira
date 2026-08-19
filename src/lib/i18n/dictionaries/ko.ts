@@ -156,6 +156,7 @@ export const ko: Record<MessageKey, string> = {
   "members.sendInvite": "초대 보내기",
   "members.sendInviteFailed": "초대 전송에 실패했습니다",
   "members.emailPlaceholder": "teammate@example.com",
+  "members.cannotInviteSelf": "자기 자신은 초대할 수 없습니다",
 
   // Team settings
   "teamSettings.teamName": "팀 이름",

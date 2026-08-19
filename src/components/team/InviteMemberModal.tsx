@@ -6,10 +6,12 @@ import { useI18n } from "@/lib/i18n/client";
 
 export function InviteMemberModal({
   teamId,
+  currentUserEmail,
   onClose,
   onSent,
 }: {
   teamId: string;
+  currentUserEmail?: string | null;
   onClose: () => void;
   onSent: (invite: InviteResponse) => void;
 }) {
@@ -19,7 +21,9 @@ export function InviteMemberModal({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const disabled = !email.trim() || submitting;
+  const isSelf =
+    !!currentUserEmail && email.trim().toLowerCase() === currentUserEmail.toLowerCase();
+  const disabled = !email.trim() || isSelf || submitting;
 
   async function handleInvite() {
     if (disabled) return;
@@ -71,14 +75,21 @@ export function InviteMemberModal({
         <label className="mb-1.5 block text-xs font-bold text-neutral-500">
           {t("members.email")}
         </label>
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder={t("members.emailPlaceholder")}
-          type="email"
-          maxLength={255}
-          className="mb-4 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[13.5px] text-neutral-900 outline-none focus:ring-2 focus:ring-neutral-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-600"
-        />
+        <div className="mb-4">
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={t("members.emailPlaceholder")}
+            type="email"
+            maxLength={255}
+            className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[13.5px] text-neutral-900 outline-none focus:ring-2 focus:ring-neutral-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-600"
+          />
+          {isSelf && (
+            <p className="mt-1.5 text-xs font-semibold text-rose-600">
+              {t("members.cannotInviteSelf")}
+            </p>
+          )}
+        </div>
 
         <label className="mb-1.5 block text-xs font-bold text-neutral-500">
           {t("members.role")}

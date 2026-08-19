@@ -56,11 +56,16 @@ function toInviteResponse(row: {
 export async function createInvite(
   teamId: string,
   actingUserId: string,
+  actingUserEmail: string,
   input: CreateInviteInput,
 ): Promise<InviteResponse> {
   const role = await requireTeamMembership(actingUserId, teamId);
   if (!isOwnerOrAdmin(role)) {
     throw new ApiError(403, "FORBIDDEN", "Only the team owner or an admin can invite members");
+  }
+
+  if (input.email.toLowerCase() === actingUserEmail.toLowerCase()) {
+    throw new ApiError(422, "CANNOT_INVITE_SELF", "You can't invite yourself");
   }
 
   const admin = createAdminClient();

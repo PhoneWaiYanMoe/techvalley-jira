@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: Params) {
     const user = await requireUser();
     const { teamId } = await params;
     const body = createInviteSchema.parse(await request.json());
-    const invite = await createInvite(teamId, user.id, body);
+    const invite = await createInvite(teamId, user.id, user.email ?? "", body);
     return Response.json(invite, { status: 201 });
   });
 }

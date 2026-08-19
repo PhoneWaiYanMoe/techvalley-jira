@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import type { ProjectResponse } from "@/types/api";
+import type { ProjectResponse, TeamResponse } from "@/types/api";
 import { ProjectCard } from "@/components/projects/ProjectCard";
 import { CreateProjectModal } from "@/components/projects/CreateProjectModal";
 
@@ -17,7 +17,7 @@ export function ProjectsPageClient() {
   const [sort, setSort] = useState<Sort>("recommended");
   const [query, setQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [teamId, setTeamId] = useState<string | null>(null);
+  const [teams, setTeams] = useState<TeamResponse[]>([]);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -26,10 +26,6 @@ export function ProjectsPageClient() {
       if (!res.ok) throw new Error("Failed to load projects");
       const data = await res.json();
       setProjects(data.data ?? []);
-      // Extract teamId from the first project for the create modal
-      if (data.data?.length > 0) {
-        setTeamId(data.data[0].teamId);
-      }
     } catch {
       // silently fail — UI shows empty state
     } finally {
@@ -37,25 +33,24 @@ export function ProjectsPageClient() {
     }
   }, []);
 
-  // If no projects exist, we need a teamId for creation. Fetch from teams API.
-  const fetchTeamId = useCallback(async () => {
+  // Full team list, so project creation can target any of the user's teams —
+  // not just whichever team happens to own the first existing project.
+  const fetchTeams = useCallback(async () => {
     try {
       const res = await fetch("/api/teams");
       if (!res.ok) return;
       const data = await res.json();
-      if (data.data?.length > 0 && !teamId) {
-        setTeamId(data.data[0].id);
-      }
+      setTeams(data.data ?? []);
     } catch {
       // ignore
     }
-  }, [teamId]);
+  }, []);
 
   useEffect(() => {
     void (async () => {
-      await Promise.all([fetchProjects(), fetchTeamId()]);
+      await Promise.all([fetchProjects(), fetchTeams()]);
     })();
-  }, [fetchProjects, fetchTeamId]);
+  }, [fetchProjects, fetchTeams]);
 
   // Filter by tab
   let filtered = projects.filter((p) => {
@@ -110,9 +105,6 @@ export function ProjectsPageClient() {
         : q
           ? "Try a different search."
           : "Create your first project to get started.";
-
-  // Determine teamId for create modal (from first project or fetch)
-  const effectiveTeamId = teamId ?? projects[0]?.teamId;
 
   function handleToggleFav(project: ProjectResponse) {
     const newFav = !project.isFavorited;
@@ -257,10 +249,13 @@ export function ProjectsPageClient() {
       )}
 
       {/* Create modal */}
-      {createOpen && effectiveTeamId && (
+      {createOpen && teams.length > 0 && (
         <CreateProjectModal
-          teamId={effectiveTeamId}
-          slotsLeft={15 - projects.filter((p) => !p.isArchived).length}
+          teams={teams}
+          projectCountByTeam={projects.reduce<Record<string, number>>((acc, p) => {
+            if (!p.isArchived) acc[p.teamId] = (acc[p.teamId] ?? 0) + 1;
+            return acc;
+          }, {})}
           onClose={() => setCreateOpen(false)}
           onCreated={(project) => {
             setProjects((prev) => [project, ...prev]);

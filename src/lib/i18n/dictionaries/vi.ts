@@ -156,6 +156,7 @@ export const vi: Record<MessageKey, string> = {
   "members.sendInvite": "Gửi lời mời",
   "members.sendInviteFailed": "Gửi lời mời thất bại",
   "members.emailPlaceholder": "teammate@example.com",
+  "members.cannotInviteSelf": "Bạn không thể tự mời chính mình",
 
   // Team settings
   "teamSettings.teamName": "Tên nhóm",
