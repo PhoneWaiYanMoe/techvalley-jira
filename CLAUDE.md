@@ -673,6 +673,52 @@ up. Investigated and finished:
   (added two assertions: no `href="#"` links in the sidebar nav, and the nav
   now has exactly 4 items).
 
+### Bug fix: TEAM_INVITE notification click 404'd (2026-07-10, found via Eric's manual testing)
+
+Clicking a "You've been invited to join ..." notification took the user to
+`/teams/:teamId` and threw an uncaught `Team not found` 404 from
+`requireTeamMembership` inside `getTeam()`. Root cause: `TEAM_INVITE`
+notifications store `relatedEntityType: "team"` / `relatedEntityId: teamId`
+(see `invite.service.ts`'s `createInvite()`) — the exact same shape
+`ROLE_CHANGED` notifications use — but unlike `ROLE_CHANGED`, the invited
+user isn't a team member yet (that's the point of an invite), so the
+FR-070 membership guard correctly, but unhelpfully, 404s them.
+
+Both notification click-handlers (`NotificationBell.tsx`'s `entityHref()` and
+`NotificationsPageClient.tsx`'s `resolveHref()`) had the same bug — each
+blindly mapped any `relatedEntityType === "team"` notification straight to
+`/teams/:teamId`. Fixed by checking `n.type === "TEAM_INVITE"` first and
+routing those to `/invites` (the existing accept-invite page) instead;
+`ROLE_CHANGED` still correctly goes to `/teams/:teamId` since that user is
+already a member. E2E-tested via scratch Playwright: created a real pending
+invite + notification, confirmed the invitee is not yet a team member,
+clicked the notification via both the bell dropdown and the full
+`/notifications` page, and verified both land on `/invites` with no 404.
+
+### Feature: block self-invites (2026-07-10, requested by Eric)
+
+Nothing stopped a team OWNER/ADMIN from typing their own email into "Invite
+member" and sending it to themselves. Fixed at both layers:
+
+- **Server (authoritative)**: `createInvite()` in `invite.service.ts` now
+  takes the acting user's email as a param (passed from `requireUser()`'s
+  already-available `user.email` in the route, no extra lookup needed) and
+  rejects a match (case-insensitive) with `422 CANNOT_INVITE_SELF` before
+  any DB write, email send, or activity log entry.
+- **Client (UX)**: `InviteMemberModal.tsx` takes a new `currentUserEmail`
+  prop (derived in `MembersPageClient.tsx` from the already-loaded
+  `initialMembers` list — the acting user is necessarily a member of the
+  team they're managing, so no extra fetch needed) and disables "Send
+  invite" + shows an inline error the moment the typed email matches,
+  before ever hitting the API.
+- New translation key `members.cannotInviteSelf` added to all three
+  dictionaries.
+- E2E-tested via scratch Playwright (9/9 passed): direct API call with the
+  owner's own email correctly 422s (case-insensitively) with no invite row
+  created, a normal different-email invite still succeeds, and the UI
+  correctly disables/re-enables the Send button and shows/hides the inline
+  error as the typed email changes.
+
 ## Task division (current)
 
 - **Dev A** (Eric, branch `dev/Eric`): Auth (FR-001..007), Teams (FR-010..019),

@@ -158,6 +158,7 @@ export const en = {
   "members.sendInvite": "Send invite",
   "members.sendInviteFailed": "Failed to send invite",
   "members.emailPlaceholder": "teammate@example.com",
+  "members.cannotInviteSelf": "You can't invite yourself",
 
   // Team settings
   "teamSettings.teamName": "Team name",

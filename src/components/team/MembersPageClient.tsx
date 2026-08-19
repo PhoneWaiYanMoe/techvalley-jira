@@ -32,6 +32,7 @@ export function MembersPageClient({
   const { t } = useI18n();
   const canManage = isOwnerOrAdmin(myRole);
   const [members, setMembers] = useState(initialMembers);
+  const currentUserEmail = members.find((m) => m.userId === currentUserId)?.email ?? null;
   const [invites, setInvites] = useState(initialInvites);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [confirmKickId, setConfirmKickId] = useState<string | null>(null);
@@ -301,6 +302,7 @@ export function MembersPageClient({
       {inviteModalOpen && (
         <InviteMemberModal
           teamId={teamId}
+          currentUserEmail={currentUserEmail}
           onClose={() => setInviteModalOpen(false)}
           onSent={(invite) => {
             setInvites((prev) => [invite, ...prev.filter((i) => i.id !== invite.id)]);

@@ -7,6 +7,12 @@ import { Button } from "@/components/ui/Button";
 import { useI18n } from "@/lib/i18n/client";
 
 async function resolveHref(n: NotificationResponse): Promise<string | null> {
+  // TEAM_INVITE also stores relatedEntityType "team" (the team being invited
+  // to), but the invited user isn't a member yet — /teams/:teamId 404s via
+  // the FR-070 membership guard until they accept. Send them to the accept
+  // flow instead. ROLE_CHANGED is the other "team" notification type and IS
+  // safe to send straight to /teams/:teamId (the user is already a member).
+  if (n.type === "TEAM_INVITE") return "/invites";
   if (n.relatedEntityType === "team" && n.relatedEntityId) return `/teams/${n.relatedEntityId}`;
   if (n.relatedEntityType === "issue" && n.relatedEntityId) {
     try {

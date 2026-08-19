@@ -1,19 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import type { ProjectResponse } from "@/types/api";
+import type { ProjectResponse, TeamResponse } from "@/types/api";
 
 export function CreateProjectModal({
-  teamId,
-  slotsLeft,
+  teams,
+  projectCountByTeam,
   onClose,
   onCreated,
 }: {
-  teamId: string;
-  slotsLeft: number;
+  teams: TeamResponse[];
+  projectCountByTeam: Record<string, number>;
   onClose: () => void;
   onCreated: (project: ProjectResponse) => void;
 }) {
+  const [teamId, setTeamId] = useState(teams[0].id);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -21,6 +22,7 @@ export function CreateProjectModal({
 
   const nameLen = name.length;
   const disabled = !name.trim() || submitting;
+  const slotsLeft = 15 - (projectCountByTeam[teamId] ?? 0);
 
   async function handleCreate() {
     if (disabled) return;
@@ -69,6 +71,24 @@ export function CreateProjectModal({
             </svg>
           </button>
         </div>
+
+        {/* Team */}
+        {teams.length > 1 && (
+          <>
+            <label className="mb-1.5 block text-xs font-bold text-neutral-500">Team</label>
+            <select
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+              className="mb-4 w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-[13.5px] text-neutral-900 outline-none focus:ring-2 focus:ring-neutral-300 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-600"
+            >
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
 
         {/* Name */}
         <label className="mb-1.5 block text-xs font-bold text-neutral-500">Name</label>
